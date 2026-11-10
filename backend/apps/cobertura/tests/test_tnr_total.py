@@ -82,15 +82,38 @@ def test_sede_con_inyeccion_rechazada(cliente, llamadas):
     assert llamadas == []
 
 
-@pytest.mark.django_db
-def test_excel_con_encabezados_legibles(cliente, llamadas):
+def _hoja(respuesta):
     from io import BytesIO
 
     from openpyxl import load_workbook
 
-    r = cliente().get(BASE + "departamentos/", {"formato": "xlsx"})
-    hoja = load_workbook(BytesIO(r.content)).active
-    assert [c.value for c in hoja[1]] == ["N°", "Nombre", "2026"]
+    return load_workbook(BytesIO(respuesta.content)).active
+
+
+@pytest.mark.django_db
+def test_excel_con_el_diseno_del_reporte(cliente, llamadas):
+    hoja = _hoja(cliente().get(BASE + "departamentos/", {"formato": "xlsx"}))
+    assert hoja["A2"].value == "TNR TOTAL NACIONAL"
+    encabezado = [hoja["A3"].value, hoja["B3"].value, hoja["C3"].value]
+    assert encabezado == ["N°", "DOMINIOS DE ESTUDIO", "AÑOS"]
+    assert hoja["C4"].value == "2026"
+    assert hoja["B5"].value == "NACIONAL"
+    assert hoja["B5"].fill.fgColor.rgb.endswith("F5FFBE")
+    assert hoja["A6"].value == "FUENTE: SISTEMA MONITOREO ENAHO"
+    assert hoja["A7"].value.startswith("FECHA Y HORA: ")
+
+
+@pytest.mark.django_db
+def test_excel_por_mes_agrupa_por_anio(cliente, monkeypatch):
+    fila = {"idMostrar": 0, "nombreMostrar": "NACIONAL", "tnr2026": 7, "tnr2026_abs": 1873,
+            "enero_2026": 5.5, "enero_2026_abs": 134}  # fmt: skip
+    monkeypatch.setattr(sistema_actual, "ejecutar_procedimiento", lambda *a, **k: [fila])
+    r = cliente().get(BASE + "odei-mes/", {"formato": "xlsx", "ambito": "SEDE LIMA=1"})
+    hoja = _hoja(r)
+    assert hoja["A2"].value == "TNR TOTAL SEDE LIMA1"
+    assert hoja["C4"].value == 2026
+    assert [hoja.cell(5, c).value for c in range(3, 7)] == ["Total", "Abs", "Ene", "Abs"]
+    assert [hoja.cell(6, c).value for c in range(2, 7)] == ["NACIONAL", 7, 1873, 5.5, 134]
 
 
 def test_etiquetas_de_columna():

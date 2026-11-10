@@ -141,7 +141,8 @@ async function consultar() {
 async function exportar() {
   exportando.value = true
   try {
-    const { data } = await api.excel(vista.value, parametros())
+    const titulo = nivel.value === 1 ? 'NACIONAL' : ambito.value
+    const { data } = await api.excel(vista.value, parametros(), titulo)
     const url = URL.createObjectURL(data)
     const nombre = `TNR-TOTAL-${ambito.value.replace(/[^A-Z0-9]+/gi, '-')}.xlsx`
     Object.assign(document.createElement('a'), { href: url, download: nombre }).click()

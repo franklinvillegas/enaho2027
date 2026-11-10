@@ -1,3 +1,5 @@
+import re
+
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,6 +10,7 @@ from apps.comun.filtros import FiltrosIndicadorSerializer
 from apps.comun.permisos import AccesoModulo
 
 from . import servicios, tnr_total
+from .excel_tnr import respuesta_tnr_total
 from .indicadores import INDICADORES
 from .repositorios import obtener_repositorio
 
@@ -101,6 +104,7 @@ class TnrTotalView(BaseCobertura):
         parameters=[
             tnr_total.FiltrosTnrTotalSerializer,
             OpenApiParameter("formato", str, enum=["json", "xlsx"], required=False),
+            OpenApiParameter("ambito", str, required=False, description="Título del Excel"),
         ],
         responses={200: dict},
     )
@@ -113,13 +117,8 @@ class TnrTotalView(BaseCobertura):
         columnas = list(filas[0].keys()) if filas else []
 
         if request.query_params.get("formato") == "xlsx":
-            return respuesta_excel(
-                f"tnr-total_{vista}",
-                tnr_total.TITULO,
-                columnas,
-                filas,
-                etiquetas={c: tnr_total.etiqueta_columna(c) for c in columnas},
-            )
+            ambito = re.sub(r"[^\w .,()\-]", "", request.query_params.get("ambito", ""))[:120]
+            return respuesta_tnr_total(vista, filtros, filas, ambito.strip().upper())
         return Response({"vista": vista, "columnas": columnas, "filas": filas})
 
 

@@ -6,8 +6,9 @@ mientras dura la migración: cuando un indicador pase a la base de monitoreo, so
 el repositorio, no la API ni el frontend.
 
 Origen: monitoreo-enaho-v2, consultasdb/api/views.py (clases sp_tnrTotal_t1, _t2, _t3, ...).
-Los valores por defecto de los parámetros opcionales ("0") siguen la corrección VUL-004
-del sistema actual. Se confirman con el código de los procedimientos.
+Formato de los parámetros igual al que envían las pantallas actuales
+(static/.../tasaNoRespuesta/tnr_total.js): meses con dos dígitos ("01".."12", "00" = sin
+filtro), periodo 0..5 (0 = todos) y "0" en los opcionales vacíos (corrección VUL-004).
 """
 
 from dataclasses import dataclass, field
@@ -15,8 +16,12 @@ from dataclasses import dataclass, field
 from apps.comun.filtros import Nivel
 
 
+def _mes(valor) -> str:
+    return f"{int(valor or 0):02d}"
+
+
 def _rango(f):
-    return [f["periodo_inicio"], f["periodo_fin"], f["mes_inicio"], f["mes_fin"]]
+    return [f["periodo_inicio"], f["periodo_fin"], _mes(f["mes_inicio"]), _mes(f["mes_fin"])]
 
 
 def _odei(f):
@@ -67,9 +72,9 @@ INDICADORES: dict[str, Indicador] = {
                             f["periodo_inicio"],
                             f["periodo_fin"],
                             "1" if f.get("solo_activos") else "0",
-                            f["mes_inicio"],
-                            f["mes_fin"],
-                            f.get("excluir") or "0",
+                            _mes(f["mes_inicio"]),
+                            _mes(f["mes_fin"]),
+                            f.get("excluir") or 0,
                         ]
                     ),
                 ),

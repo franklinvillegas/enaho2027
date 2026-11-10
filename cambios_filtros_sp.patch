@@ -1,0 +1,245 @@
+diff --git a/backend/apps/cobertura/indicadores.py b/backend/apps/cobertura/indicadores.py
+index 1fac541..40c0e2f 100644
+--- a/backend/apps/cobertura/indicadores.py
++++ b/backend/apps/cobertura/indicadores.py
+@@ -6,8 +6,9 @@ mientras dura la migración: cuando un indicador pase a la base de monitoreo, so
+ el repositorio, no la API ni el frontend.
+ 
+ Origen: monitoreo-enaho-v2, consultasdb/api/views.py (clases sp_tnrTotal_t1, _t2, _t3, ...).
+-Los valores por defecto de los parámetros opcionales ("0") siguen la corrección VUL-004
+-del sistema actual. Se confirman con el código de los procedimientos.
++Formato de los parámetros igual al que envían las pantallas actuales
++(static/.../tasaNoRespuesta/tnr_total.js): meses con dos dígitos ("01".."12", "00" = sin
++filtro), periodo 0..5 (0 = todos) y "0" en los opcionales vacíos (corrección VUL-004).
+ """
+ 
+ from dataclasses import dataclass, field
+@@ -15,8 +16,12 @@ from dataclasses import dataclass, field
+ from apps.comun.filtros import Nivel
+ 
+ 
++def _mes(valor) -> str:
++    return f"{int(valor or 0):02d}"
++
++
+ def _rango(f):
+-    return [f["periodo_inicio"], f["periodo_fin"], f["mes_inicio"], f["mes_fin"]]
++    return [f["periodo_inicio"], f["periodo_fin"], _mes(f["mes_inicio"]), _mes(f["mes_fin"])]
+ 
+ 
+ def _odei(f):
+@@ -67,9 +72,9 @@ INDICADORES: dict[str, Indicador] = {
+                             f["periodo_inicio"],
+                             f["periodo_fin"],
+                             "1" if f.get("solo_activos") else "0",
+-                            f["mes_inicio"],
+-                            f["mes_fin"],
+-                            f.get("excluir") or "0",
++                            _mes(f["mes_inicio"]),
++                            _mes(f["mes_fin"]),
++                            f.get("excluir") or 0,
+                         ]
+                     ),
+                 ),
+diff --git a/backend/apps/cobertura/tests/test_cobertura.py b/backend/apps/cobertura/tests/test_cobertura.py
+index 277846a..0cc380e 100644
+--- a/backend/apps/cobertura/tests/test_cobertura.py
++++ b/backend/apps/cobertura/tests/test_cobertura.py
+@@ -9,6 +9,7 @@ from apps.comun.filtros import Nivel
+ 
+ URL = "/api/v1/cobertura/indicadores/tnr-total/"
+ RANGO = {"periodo_inicio": 1, "periodo_fin": 3, "mes_inicio": 1, "mes_fin": 6}
++TODO = {"periodo_inicio": 0, "periodo_fin": 0, "mes_inicio": 0, "mes_fin": 0}
+ 
+ 
+ class RepositorioFalso:
+@@ -50,7 +51,7 @@ def test_nivel_departamento_llama_al_procedimiento_actual_con_parametros_en_orde
+     r = cliente().get(URL, {"nivel": "departamento", **RANGO})
+     assert r.status_code == 200
+     assert r.json()["filas"][0]["departamento"] == "LIMA"
+-    assert repo.llamadas == [("cobertura_tasaNoRespuestaTotal_dep", ["1", "3", "1", "6"])]
++    assert repo.llamadas == [("cobertura_tasaNoRespuestaTotal_dep", ["1", "3", "01", "06"])]
+ 
+ 
+ @pytest.mark.django_db
+@@ -59,7 +60,7 @@ def test_nivel_conglomerado_usa_ceros_en_opcionales(cliente, repo):
+     assert r.status_code == 200
+     proc, params = repo.llamadas[0]
+     assert proc == "enaho2015_cobertura_ind03_3_v4"
+-    assert params == ["15", "0", "0", "1", "3", "0", "1", "6", "0"]
++    assert params == ["15", "0", "0", "1", "3", "0", "01", "06", "0"]
+ 
+ 
+ @pytest.mark.django_db
+@@ -112,3 +113,17 @@ def test_todos_los_procedimientos_estan_en_la_lista_blanca():
+ def test_sistema_actual_rechaza_procedimientos_fuera_de_la_lista():
+     with pytest.raises(sistema_actual.ProcedimientoNoPermitidoError):
+         sistema_actual.ejecutar_procedimiento("sp_cualquiera")
++
++
++@pytest.mark.django_db
++def test_sin_filtros_envia_todos_como_las_pantallas_actuales(cliente, repo):
++    r = cliente().get(URL, {"nivel": "departamento"})
++    assert r.status_code == 200
++    assert repo.llamadas == [("cobertura_tasaNoRespuestaTotal_dep", ["0", "0", "00", "00"])]
++
++
++@pytest.mark.django_db
++def test_mes_final_anterior_al_inicial_es_rechazado(cliente, repo):
++    r = cliente().get(URL, {"nivel": "departamento", **TODO, "mes_inicio": 6, "mes_fin": 2})
++    assert r.status_code == 400
++    assert repo.llamadas == []
+diff --git a/backend/apps/comun/filtros.py b/backend/apps/comun/filtros.py
+index a5fd688..7cf6245 100644
+--- a/backend/apps/comun/filtros.py
++++ b/backend/apps/comun/filtros.py
+@@ -4,7 +4,12 @@ En el sistema actual el mismo concepto tenía varios nombres (depart / departame
+ odei; funcionario / encues / encuestador) y el rango llegaba en cuatro piezas en la
+ URL. Aquí hay un solo nombre por concepto y llegan como parámetros de consulta:
+ 
+-    ?nivel=odei&odei=15&periodo_inicio=1&mes_inicio=1&periodo_fin=3&mes_fin=6
++    ?nivel=odei&odei=15&periodo_inicio=0&mes_inicio=1&periodo_fin=0&mes_fin=6
++
++Valores tomados de las pantallas actuales (tnr_total.html):
++  - mes: 1 a 12, o 0 = sin filtro. Se envía al procedimiento con dos dígitos ("01", "00").
++  - periodo: 1 a 5, o 0 = todos.
++  - excluir: 0 sin exclusiones, 1 no panel, 2 panel, 3 panel ausente sin teléfono.
+ """
+ 
+ from rest_framework import serializers
+@@ -21,19 +26,28 @@ class Nivel:
+ 
+ class FiltrosIndicadorSerializer(serializers.Serializer):
+     nivel = serializers.ChoiceField(choices=Nivel.OPCIONES, default=Nivel.DEPARTAMENTO)
+-    periodo_inicio = serializers.IntegerField(min_value=1, max_value=9)
+-    periodo_fin = serializers.IntegerField(min_value=1, max_value=9)
+-    mes_inicio = serializers.IntegerField(min_value=1, max_value=12)
+-    mes_fin = serializers.IntegerField(min_value=1, max_value=12)
++    periodo_inicio = serializers.IntegerField(min_value=0, max_value=5, default=0)
++    periodo_fin = serializers.IntegerField(min_value=0, max_value=5, default=0)
++    mes_inicio = serializers.IntegerField(min_value=0, max_value=12, default=0)
++    mes_fin = serializers.IntegerField(min_value=0, max_value=12, default=0)
+     odei = serializers.ChoiceField(choices=[c for c, _ in ODEIS], required=False)
+     encuestador = serializers.RegexField(r"^[0-9A-Za-z_]{1,20}$", required=False)
+     conglomerado = serializers.RegexField(r"^[0-9]{6}$", required=False)
+     solo_activos = serializers.BooleanField(default=False)
+-    excluir = serializers.RegexField(r"^[0-9A-Za-z,]{0,50}$", required=False, allow_blank=True)
++    excluir = serializers.ChoiceField(choices=[0, 1, 2, 3], default=0)
+ 
+     def validate(self, datos):
+-        # Pendiente: validar que el inicio del rango no sea posterior al fin, cuando se
+-        # confirme con los procedimientos cómo se combinan periodo y mes.
++        # Mismas reglas que las pantallas actuales
++        if datos["mes_fin"] and datos["mes_fin"] < datos["mes_inicio"]:
++            raise serializers.ValidationError({"mes_fin": "El mes final es anterior al inicial."})
++        if (
++            datos["periodo_fin"]
++            and datos["mes_inicio"] == datos["mes_fin"]
++            and datos["periodo_inicio"] > datos["periodo_fin"]
++        ):
++            raise serializers.ValidationError(
++                {"periodo_fin": "El periodo final es anterior al inicial."}
++            )
+         if datos["nivel"] in (Nivel.ODEI, Nivel.CONGLOMERADO) and not datos.get("odei"):
+             raise serializers.ValidationError({"odei": "Requerido para este nivel."})
+         return datos
+diff --git a/frontend/src/components/indicador/FiltrosIndicador.vue b/frontend/src/components/indicador/FiltrosIndicador.vue
+index 5301ea8..6941ff3 100644
+--- a/frontend/src/components/indicador/FiltrosIndicador.vue
++++ b/frontend/src/components/indicador/FiltrosIndicador.vue
+@@ -6,6 +6,7 @@ const filtros = defineModel({ type: Object, required: true })
+ const props = defineProps({
+   niveles: { type: Array, default: () => ['departamento'] },
+   cargando: { type: Boolean, default: false },
++  conExclusiones: { type: Boolean, default: false },
+ })
+ defineEmits(['consultar'])
+ 
+@@ -14,9 +15,22 @@ const NOMBRES_NIVEL = {
+   odei: 'ODEI y encuestador',
+   conglomerado: 'Conglomerado',
+ }
+-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto',
+-  'Setiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((t, i) => ({ title: t, value: i + 1 }))
+-const PERIODOS = [1, 2, 3].map((p) => ({ title: `Periodo ${p}`, value: p }))
++// Mismas opciones que las pantallas actuales: 0 = todos / sin filtro.
++const MESES = [
++  { title: 'Todos', value: 0 },
++  ...['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Setiembre',
++    'Octubre', 'Noviembre', 'Diciembre'].map((t, i) => ({ title: t, value: i + 1 })),
++]
++const PERIODOS = [
++  { title: 'Todos', value: 0 },
++  ...[1, 2, 3, 4, 5].map((p) => ({ title: `Periodo ${p}`, value: p })),
++]
++const EXCLUSIONES = [
++  { title: 'Sin exclusiones', value: 0 },
++  { title: 'Excluir no panel', value: 1 },
++  { title: 'Excluir panel', value: 2 },
++  { title: 'Excluir panel ausente sin teléfono', value: 3 },
++]
+ 
+ const odeis = ref([])
+ const opcionesNivel = computed(() => props.niveles.map((n) => ({ title: NOMBRES_NIVEL[n] ?? n, value: n })))
+@@ -33,7 +47,7 @@ onMounted(async () => {
+   <v-card class="mb-4">
+     <v-card-text>
+       <v-row dense>
+-        <v-col cols="12" md="3">
++        <v-col cols="12" md="2">
+           <v-select v-model="filtros.nivel" :items="opcionesNivel" label="Nivel de detalle" />
+         </v-col>
+         <v-col cols="6" md="2">
+@@ -48,6 +62,9 @@ onMounted(async () => {
+         <v-col cols="6" md="2">
+           <v-select v-model="filtros.periodo_fin" :items="PERIODOS" label="Periodo final" />
+         </v-col>
++        <v-col v-if="conExclusiones" cols="12" md="2">
++          <v-select v-model="filtros.excluir" :items="EXCLUSIONES" label="Exclusiones" />
++        </v-col>
+       </v-row>
+       <v-row v-if="requiereOdei" dense>
+         <v-col cols="12" md="3">
+diff --git a/frontend/src/composables/useIndicador.js b/frontend/src/composables/useIndicador.js
+index 5cde737..0d50ff1 100644
+--- a/frontend/src/composables/useIndicador.js
++++ b/frontend/src/composables/useIndicador.js
+@@ -8,13 +8,14 @@ import { registrarUso } from '@/api/comun'
+  * calidad, valores monetarios, etc.
+  */
+ export function useIndicador(api, codigo, pantalla) {
+-  const hoy = new Date()
++  // Por defecto, igual que las pantallas actuales: todos los meses y periodos.
+   const filtros = reactive({
+     nivel: 'departamento',
+-    periodo_inicio: 1,
+-    periodo_fin: 1,
+-    mes_inicio: 1,
+-    mes_fin: hoy.getMonth() + 1,
++    periodo_inicio: 0,
++    periodo_fin: 0,
++    mes_inicio: 0,
++    mes_fin: 0,
++    excluir: 0,
+     odei: null,
+     encuestador: null,
+     conglomerado: null,
+diff --git a/frontend/src/views/cobertura/IndicadorCoberturaView.vue b/frontend/src/views/cobertura/IndicadorCoberturaView.vue
+index fdd8f17..ea60f8f 100644
+--- a/frontend/src/views/cobertura/IndicadorCoberturaView.vue
++++ b/frontend/src/views/cobertura/IndicadorCoberturaView.vue
+@@ -32,7 +32,13 @@ watch(pestana, (p) => {
+ <template>
+   <h1 class="text-h5 mb-4">{{ titulo }}</h1>
+ 
+-  <FiltrosIndicador v-model="filtros" :niveles="info.niveles" :cargando="cargando" @consultar="consultar">
++  <FiltrosIndicador
++    v-model="filtros"
++    :niveles="info.niveles"
++    :cargando="cargando"
++    :con-exclusiones="indicador === 'tnr-total'"
++    @consultar="consultar"
++  >
+     <template #acciones>
+       <v-btn
+         variant="outlined"

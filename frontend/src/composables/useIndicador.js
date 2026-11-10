@@ -8,13 +8,14 @@ import { registrarUso } from '@/api/comun'
  * calidad, valores monetarios, etc.
  */
 export function useIndicador(api, codigo, pantalla) {
-  const hoy = new Date()
+  // Por defecto, igual que las pantallas actuales: todos los meses y periodos.
   const filtros = reactive({
     nivel: 'departamento',
-    periodo_inicio: 1,
-    periodo_fin: 1,
-    mes_inicio: 1,
-    mes_fin: hoy.getMonth() + 1,
+    periodo_inicio: 0,
+    periodo_fin: 0,
+    mes_inicio: 0,
+    mes_fin: 0,
+    excluir: 0,
     odei: null,
     encuestador: null,
     conglomerado: null,

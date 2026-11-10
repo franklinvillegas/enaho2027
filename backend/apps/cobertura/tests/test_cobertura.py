@@ -9,6 +9,7 @@ from apps.comun.filtros import Nivel
 
 URL = "/api/v1/cobertura/indicadores/tnr-total/"
 RANGO = {"periodo_inicio": 1, "periodo_fin": 3, "mes_inicio": 1, "mes_fin": 6}
+TODO = {"periodo_inicio": 0, "periodo_fin": 0, "mes_inicio": 0, "mes_fin": 0}
 
 
 class RepositorioFalso:
@@ -50,7 +51,7 @@ def test_nivel_departamento_llama_al_procedimiento_actual_con_parametros_en_orde
     r = cliente().get(URL, {"nivel": "departamento", **RANGO})
     assert r.status_code == 200
     assert r.json()["filas"][0]["departamento"] == "LIMA"
-    assert repo.llamadas == [("cobertura_tasaNoRespuestaTotal_dep", ["1", "3", "1", "6"])]
+    assert repo.llamadas == [("cobertura_tasaNoRespuestaTotal_dep", ["1", "3", "01", "06"])]
 
 
 @pytest.mark.django_db
@@ -59,7 +60,7 @@ def test_nivel_conglomerado_usa_ceros_en_opcionales(cliente, repo):
     assert r.status_code == 200
     proc, params = repo.llamadas[0]
     assert proc == "enaho2015_cobertura_ind03_3_v4"
-    assert params == ["15", "0", "0", "1", "3", "0", "1", "6", "0"]
+    assert params == ["15", "0", "0", "1", "3", "0", "01", "06", "0"]
 
 
 @pytest.mark.django_db
@@ -112,3 +113,17 @@ def test_todos_los_procedimientos_estan_en_la_lista_blanca():
 def test_sistema_actual_rechaza_procedimientos_fuera_de_la_lista():
     with pytest.raises(sistema_actual.ProcedimientoNoPermitidoError):
         sistema_actual.ejecutar_procedimiento("sp_cualquiera")
+
+
+@pytest.mark.django_db
+def test_sin_filtros_envia_todos_como_las_pantallas_actuales(cliente, repo):
+    r = cliente().get(URL, {"nivel": "departamento"})
+    assert r.status_code == 200
+    assert repo.llamadas == [("cobertura_tasaNoRespuestaTotal_dep", ["0", "0", "00", "00"])]
+
+
+@pytest.mark.django_db
+def test_mes_final_anterior_al_inicial_es_rechazado(cliente, repo):
+    r = cliente().get(URL, {"nivel": "departamento", **TODO, "mes_inicio": 6, "mes_fin": 2})
+    assert r.status_code == 400
+    assert repo.llamadas == []

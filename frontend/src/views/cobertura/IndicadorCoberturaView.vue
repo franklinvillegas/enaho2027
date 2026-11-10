@@ -32,7 +32,13 @@ watch(pestana, (p) => {
 <template>
   <h1 class="text-h5 mb-4">{{ titulo }}</h1>
 
-  <FiltrosIndicador v-model="filtros" :niveles="info.niveles" :cargando="cargando" @consultar="consultar">
+  <FiltrosIndicador
+    v-model="filtros"
+    :niveles="info.niveles"
+    :cargando="cargando"
+    :con-exclusiones="indicador === 'tnr-total'"
+    @consultar="consultar"
+  >
     <template #acciones>
       <v-btn
         variant="outlined"

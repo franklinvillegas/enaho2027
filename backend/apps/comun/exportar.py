@@ -8,11 +8,17 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 
-def respuesta_excel(nombre_archivo: str, titulo: str, columnas: list[str], filas: list[dict]):
+def respuesta_excel(
+    nombre_archivo: str,
+    titulo: str,
+    columnas: list[str],
+    filas: list[dict],
+    etiquetas: dict | None = None,
+):
     libro = Workbook()
     hoja = libro.active
     hoja.title = titulo[:31]
-    hoja.append(columnas)
+    hoja.append([(etiquetas or {}).get(c, c) for c in columnas])
     for celda in hoja[1]:
         celda.font = Font(bold=True)
     for fila in filas:

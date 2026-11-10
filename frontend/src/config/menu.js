@@ -41,7 +41,7 @@ export const MENU = [
     titulo: 'Indicadores de cobertura',
     icono: 'mdi-chart-bar',
     pantallas: [
-      { slug: 'tnr-total', titulo: 'Tasa de no respuesta total', indicador: 'tnr-total' },
+      { slug: 'tnr-total', titulo: 'Tasa de no respuesta total', migrada: true },
       { slug: 'tnr-parcial', titulo: 'Tasa de no respuesta parcial', indicador: 'tnr-parcial' },
       { slug: 'tnr-estrato', titulo: 'Tasa de no respuesta por estrato' },
       { slug: 'problemas-marco', titulo: 'Tasa de problemas de marco', indicador: 'problemas-marco' },

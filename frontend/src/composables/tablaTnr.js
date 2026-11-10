@@ -1,0 +1,75 @@
+// Arma la tabla de TNR a partir de las columnas que devuelve el procedimiento.
+// En el sistema actual los años (2012–2026) y los meses (2025 y 2026) estaban escritos
+// a mano en el JavaScript; aquí salen de los datos, así no hay que editar el código
+// cada año.
+
+export const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
+  'setiembre', 'octubre', 'noviembre', 'diciembre']
+export const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct',
+  'Nov', 'Dic']
+
+const RE_ANIO = /^tnr(\d{4})$/i
+const RE_MES = new RegExp(`^(${MESES.join('|')})_(\\d{4})$`, 'i')
+
+/** Años con columna tnrAAAA, ordenados. */
+export function aniosDe(columnas) {
+  return columnas.map((c) => c.match(RE_ANIO)?.[1]).filter(Boolean).map(Number).sort((a, b) => a - b)
+}
+
+/** Años que tienen columnas mensuales (enero_2026, ...). */
+export function aniosConMeses(columnas) {
+  const anios = new Set(columnas.map((c) => c.match(RE_MES)?.[2]).filter(Boolean).map(Number))
+  return [...anios].sort((a, b) => a - b)
+}
+
+/**
+ * Modelo de columnas de datos para la tabla.
+ * - Si hay columnas mensuales: por cada año → Total, Abs, Ene, Abs, ... Dic, Abs.
+ * - Si no: una columna por año (tnrAAAA).
+ * La última columna de tasa se marca para colorearla, como en el sistema actual.
+ */
+export function modeloColumnas(columnas) {
+  const conMeses = aniosConMeses(columnas)
+  if (conMeses.length) {
+    const grupos = conMeses.map((anio) => {
+      const cols = []
+      if (columnas.includes(`tnr${anio}`)) {
+        cols.push({ clave: `tnr${anio}`, titulo: 'Total', tasa: true })
+        cols.push({ clave: `tnr${anio}_abs`, titulo: 'Abs' })
+      }
+      MESES.forEach((m, i) => {
+        cols.push({ clave: `${m}_${anio}`, titulo: MESES_CORTOS[i], tasa: true })
+        cols.push({ clave: `${m}_${anio}_abs`, titulo: 'Abs' })
+      })
+      return { anio, columnas: cols.filter((c) => columnas.includes(c.clave)) }
+    })
+    return { tipo: 'meses', grupos }
+  }
+  const anios = aniosDe(columnas)
+  return {
+    tipo: 'anios',
+    grupos: [{ anio: null, columnas: anios.map((a, i) => ({
+      clave: `tnr${a}`, titulo: String(a), tasa: true, colorear: i === anios.length - 1,
+    })) }],
+  }
+}
+
+/** Escala azul de la última columna (colorCasilla, caso 6, del sistema actual). */
+export function colorCasilla(valor) {
+  const v = Number(valor)
+  if (v <= 33.33) return { fondo: '#DCF2FD', texto: '#000000' }
+  if (v <= 66.66) return { fondo: '#ACD6F2', texto: '#FFFFFF' }
+  if (v <= 89.99) return { fondo: '#4DBEED', texto: '#FFFFFF' }
+  if (v <= 99.99) return { fondo: '#00A5E8', texto: '#FFFFFF' }
+  return { fondo: '#007DC5', texto: '#FFFFFF' }
+}
+
+export function formatear(valor, esTasa) {
+  if (valor === null || valor === undefined || valor === '') return '-'
+  const n = Number(valor)
+  if (Number.isNaN(n)) return String(valor)
+  return esTasa ? n.toFixed(1) : String(Math.round(n))
+}
+
+/** Fila resaltada en amarillo: la primera (total) y los títulos de sección (idMostrar = 0). */
+export const esFilaTotal = (fila, i) => i === 0 || String(fila.idMostrar) === '0'

@@ -43,3 +43,25 @@ describe('menú', () => {
     expect(MENU).toHaveLength(6)
   })
 })
+
+import { colorCasilla, modeloColumnas } from '../tablaTnr'
+
+describe('tabla TNR', () => {
+  it('arma columnas por año desde los datos', () => {
+    const m = modeloColumnas(['idMostrar', 'nombreMostrar', 'tnr2012', 'tnr2027', 'tnr2013'])
+    expect(m.tipo).toBe('anios')
+    expect(m.grupos[0].columnas.map((c) => c.titulo)).toEqual(['2012', '2013', '2027'])
+    expect(m.grupos[0].columnas.at(-1).colorear).toBe(true)
+  })
+  it('arma columnas por mes para cualquier año', () => {
+    const cols = ['tnr2027', 'tnr2027_abs', 'enero_2027', 'enero_2027_abs', 'febrero_2027']
+    const m = modeloColumnas(cols)
+    expect(m.tipo).toBe('meses')
+    expect(m.grupos[0].anio).toBe(2027)
+    expect(m.grupos[0].columnas.map((c) => c.titulo)).toEqual(['Total', 'Abs', 'Ene', 'Abs', 'Feb'])
+  })
+  it('usa la escala azul del sistema actual', () => {
+    expect(colorCasilla(7).fondo).toBe('#DCF2FD')
+    expect(colorCasilla(100).fondo).toBe('#007DC5')
+  })
+})

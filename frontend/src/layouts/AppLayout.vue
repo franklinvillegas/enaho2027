@@ -16,11 +16,11 @@ async function salir() {
 </script>
 
 <template>
-  <v-app-bar color="primary" density="comfortable">
+  <v-app-bar color="#1565C0" density="comfortable" flat>
     <v-app-bar-nav-icon aria-label="Mostrar u ocultar menú" @click="drawer = !drawer" />
-    <v-app-bar-title>Monitoreo ENAHO</v-app-bar-title>
+    <v-app-bar-title class="text-center titulo-sistema">ENCUESTA NACIONAL DE HOGARES</v-app-bar-title>
     <template #append>
-      <span class="text-body-2 mr-3 d-none d-sm-inline">{{ auth.usuario?.nombre }}</span>
+      <span class="text-body-2 mr-3 d-none d-sm-inline font-weight-medium">{{ auth.usuario?.nombre?.toUpperCase() }}</span>
       <v-btn variant="text" prepend-icon="mdi-logout" @click="salir">Salir</v-btn>
     </template>
   </v-app-bar>
@@ -39,7 +39,7 @@ async function salir() {
           :title="p.titulo"
           density="compact"
         >
-          <template v-if="!p.indicador || m.modulo !== 'cobertura'" #append>
+          <template v-if="!p.migrada && !(p.indicador && m.modulo === 'cobertura')" #append>
             <v-icon size="x-small" icon="mdi-progress-wrench" title="En construcción" />
           </template>
         </v-list-item>
@@ -47,9 +47,13 @@ async function salir() {
     </v-list>
   </v-navigation-drawer>
 
-  <v-main>
+  <v-main class="bg-white">
     <v-container fluid class="pa-4">
       <router-view />
     </v-container>
   </v-main>
 </template>
+
+<style scoped>
+.titulo-sistema { font-size: 1.25rem; font-weight: 500; letter-spacing: 0.01em; }
+</style>

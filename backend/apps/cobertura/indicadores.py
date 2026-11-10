@@ -55,32 +55,7 @@ class Indicador:
 INDICADORES: dict[str, Indicador] = {
     i.codigo: i
     for i in [
-        Indicador(
-            codigo="tnr-total",
-            nombre="Tasa de no respuesta total",
-            niveles={
-                Nivel.DEPARTAMENTO: Consulta("cobertura_tasaNoRespuestaTotal_dep", _rango),
-                Nivel.ODEI: Consulta(
-                    "enaho2015_cobertura_ind03_2_v2", lambda f: _odei(f) + _rango(f)
-                ),
-                Nivel.CONGLOMERADO: Consulta(
-                    "enaho2015_cobertura_ind03_3_v4",
-                    lambda f: (
-                        _odei(f)
-                        + [
-                            f.get("conglomerado") or "0",
-                            f["periodo_inicio"],
-                            f["periodo_fin"],
-                            "1" if f.get("solo_activos") else "0",
-                            _mes(f["mes_inicio"]),
-                            _mes(f["mes_fin"]),
-                            f.get("excluir") or 0,
-                        ]
-                    ),
-                ),
-            },
-            mapa=Consulta("enaho2015_tnr_total_map"),
-        ),
+        # TNR total tiene su propia pantalla con vistas: ver tnr_total.py.
         # Los siguientes indicadores tienen por ahora solo el nivel departamento.
         # Los niveles ODEI y conglomerado se agregan cuando se confirme el orden
         # de parámetros con el código de cada procedimiento.

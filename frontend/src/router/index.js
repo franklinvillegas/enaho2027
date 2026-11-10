@@ -7,6 +7,10 @@ import LoginView from '@/views/LoginView.vue'
 import InicioView from '@/views/InicioView.vue'
 
 const IndicadorCobertura = () => import('@/views/cobertura/IndicadorCoberturaView.vue')
+const TnrTotal = () => import('@/views/cobertura/TnrTotalView.vue')
+
+// Pantallas con vista propia (replican el diseño de la pantalla actual)
+const VISTAS_PROPIAS = { 'cobertura/tnr-total': TnrTotal }
 const EnConstruccion = () => import('@/views/EnConstruccionView.vue')
 
 // Una ruta por pantalla del menú. Las pantallas migradas apuntan a su vista real.
@@ -14,7 +18,9 @@ const rutasPantallas = MENU.flatMap((m) =>
   m.pantallas.map((p) => ({
     path: `${rutaModulo(m.modulo)}/${p.slug}`,
     name: `${m.modulo}-${p.slug}`,
-    component: m.modulo === 'cobertura' && p.indicador ? IndicadorCobertura : EnConstruccion,
+    component:
+      VISTAS_PROPIAS[`${m.modulo}/${p.slug}`] ??
+      (m.modulo === 'cobertura' && p.indicador ? IndicadorCobertura : EnConstruccion),
     props: p.indicador ? { indicador: p.indicador, titulo: p.titulo } : { titulo: p.titulo },
     meta: { modulo: m.modulo, titulo: p.titulo, pantalla: `${m.modulo}/${p.slug}` },
   })),

@@ -6,7 +6,7 @@
 //  - errores en pantalla, no con alert()
 //  - la vista, la pestaña y el nivel quedan en la dirección: funciona "Atrás" y se comparte
 //  - mapa sin servicios externos (antes Google GeoChart con clave expuesta)
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
 import { use, registerMap } from 'echarts/core'
@@ -225,6 +225,24 @@ const opcionesMapa = computed(() => {
   }
 })
 
+// Alto de la tabla: ocupa todo el espacio libre hasta el borde inferior de la ventana
+// (encabezado fijo y desplazamiento dentro de la tabla). Se recalcula al cambiar el
+// tamaño de la ventana, la pestaña o los datos.
+const contenedorTabla = ref(null)
+const altoTabla = ref(440)
+function ajustarAltoTabla() {
+  const el = contenedorTabla.value
+  if (!el || !el.offsetParent) return
+  const arriba = el.getBoundingClientRect().top + window.scrollY
+  altoTabla.value = Math.max(320, Math.floor(window.innerHeight - arriba - 24))
+}
+const reajustar = () => nextTick(() => requestAnimationFrame(ajustarAltoTabla))
+watch([datos, pestana, nivel, cargando, error], reajustar)
+window.addEventListener('resize', ajustarAltoTabla)
+// Si algo de arriba cambia de alto (mensajes, ruta de navegación), la tabla se reacomoda
+const observador = new ResizeObserver(() => ajustarAltoTabla())
+onMounted(() => observador.observe(document.body))
+
 // Ciclo de vida
 onMounted(async () => {
   registrarUso('cobertura/tnr-total', 'ingreso')
@@ -238,7 +256,10 @@ watch([vista, sede, usuario, conglomerado], consultar, { immediate: true })
 watch(pestana, (p) => p === 'mapa' && !datosMapa.value.length && cargarMapa(), { immediate: true })
 const salir = () => registrarUso('cobertura/tnr-total', 'salida')
 window.addEventListener('beforeunload', salir)
+onMounted(reajustar)
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', ajustarAltoTabla)
+  observador.disconnect()
   window.removeEventListener('beforeunload', salir)
   salir()
 })
@@ -314,7 +335,7 @@ onBeforeUnmount(() => {
           density="compact" variant="outlined" hide-details style="max-width: 200px" />
       </div>
 
-      <div class="tabla-contenedor">
+      <div ref="contenedorTabla" class="tabla-contenedor" :style="{ maxHeight: `${altoTabla}px` }">
         <table class="tabla-tnr">
           <thead>
             <tr>
@@ -404,7 +425,7 @@ onBeforeUnmount(() => {
 .exportar a { cursor: pointer; color: #000; }
 .exportar a.deshabilitado { opacity: 0.5; pointer-events: none; }
 .buscar { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 0.85rem; margin-bottom: 6px; }
-.tabla-contenedor { overflow: auto; max-height: 440px; border-bottom: 1px solid #333; }
+.tabla-contenedor { overflow: auto; border-bottom: 1px solid #333; }
 .tabla-tnr { border-collapse: separate; border-spacing: 0; font-size: 0.72rem; min-width: 100%; }
 .tabla-tnr th { background: #0065A9; color: #fff; text-align: center; vertical-align: middle; padding: 10px 8px;
   font-weight: 700; border: 1px solid rgba(255, 255, 255, 0.25); white-space: nowrap; position: sticky; z-index: 2; }

@@ -30,6 +30,7 @@ const info = ref({ titulo: 'Tasa de no respuesta total', descripcion: '', formul
 const datos = ref({ columnas: [], filas: [] })
 const cargando = ref(false)
 const exportando = ref(false)
+const cargandoMapa = ref(false)
 const error = ref('')
 const busqueda = ref('')
 
@@ -199,6 +200,7 @@ const mapaListo = ref(false)
 const datosMapa = ref([])
 const normalizar = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim()
 async function cargarMapa() {
+  cargandoMapa.value = true
   try {
     if (!mapaListo.value) {
       const geo = await (await fetch('/geo/peru_departamentos.geojson')).json()
@@ -210,8 +212,22 @@ async function cargarMapa() {
     datosMapa.value = data.map((d) => ({ name: normalizar(d.departamento), value: Number(d.indicador) }))
   } catch (e) {
     error.value = mensajeError(e)
+  } finally {
+    cargandoMapa.value = false
   }
 }
+
+// Ventana de espera: tapa toda la vista mientras hay una consulta en curso, para que no
+// se cambie de pestaña o de vista a medio cargar. No se puede cerrar; se va sola al terminar.
+const ocupado = computed(() => cargando.value || cargandoMapa.value || exportando.value)
+const mensajeEspera = computed(() => (exportando.value ? 'Generando Excel...' : 'Cargando información...'))
+const segundos = ref(0)
+let reloj = null
+watch(ocupado, (si) => {
+  clearInterval(reloj)
+  segundos.value = 0
+  if (si) reloj = setInterval(() => segundos.value++, 1000)
+})
 const opcionesMapa = computed(() => {
   const valores = datosMapa.value.map((d) => d.value)
   return {
@@ -261,6 +277,7 @@ const salir = () => registrarUso('cobertura/tnr-total', 'salida')
 window.addEventListener('beforeunload', salir)
 onMounted(reajustar)
 onBeforeUnmount(() => {
+  clearInterval(reloj)
   window.removeEventListener('resize', ajustarAltoTabla)
   observador.disconnect()
   window.removeEventListener('beforeunload', salir)
@@ -292,7 +309,14 @@ onBeforeUnmount(() => {
       <button :class="{ activa: pestana === 'mapa' }" @click="cambiarPestana('mapa')">MAPA DE CALOR</button>
     </div>
 
-    <div v-if="cargando" class="cargando">Cargando... <v-progress-circular indeterminate size="20" width="2" /></div>
+    <v-overlay :model-value="ocupado" persistent no-click-animation scrim="#000000" opacity="0.45"
+      class="align-center justify-center" aria-live="polite">
+      <div class="espera">
+        <v-progress-circular indeterminate color="#1565C0" size="44" width="4" />
+        <div class="espera-texto">{{ mensajeEspera }}</div>
+        <div v-if="segundos >= 3" class="espera-tiempo">{{ segundos }} s</div>
+      </div>
+    </v-overlay>
     <v-alert v-if="error" type="error" variant="tonal" density="compact" class="my-3" closable @click:close="error = ''">
       {{ error }}
     </v-alert>
@@ -410,7 +434,10 @@ onBeforeUnmount(() => {
 .pestanas button { padding: 12px 18px; font-size: 0.82rem; color: #333; border: 1px solid transparent;
   border-bottom: none; background: none; cursor: pointer; }
 .pestanas button.activa { border-color: #ddd; border-top: 2px solid #1E88E5; background: #fff; margin-bottom: -1px; }
-.cargando { text-align: center; font-size: 0.85rem; margin: 6px; }
+.espera { background: #fff; border-radius: 6px; padding: 24px 40px; text-align: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); min-width: 260px; }
+.espera-texto { margin-top: 14px; font-size: 0.95rem; font-weight: 500; color: #333; }
+.espera-tiempo { margin-top: 4px; font-size: 0.8rem; color: #777; }
 .panel { border: 1px solid #ddd; border-radius: 3px; background: #fff; padding: 12px; }
 .mapa { max-width: 1140px; margin: 0 auto; }
 .texto-indicador { font-size: 0.85rem; margin-top: 8px; }

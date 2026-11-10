@@ -219,7 +219,10 @@ const opcionesMapa = computed(() => {
     visualMap: { min: Math.min(...valores), max: Math.max(...valores), left: 20, bottom: 20,
       orient: 'horizontal', calculable: false, text: [String(Math.max(...valores)), String(Math.min(...valores))],
       inRange: { color: ['#EFE8DF', '#3A95F7'] } },
+    // aspectScale 1: Perú está cerca del ecuador y no necesita la corrección por defecto (0.75),
+    // que lo dibujaba angosto
     series: [{ type: 'map', map: 'peru', roam: false, data: datosMapa.value,
+      aspectScale: 1, layoutCenter: ['50%', '50%'], layoutSize: '98%',
       itemStyle: { borderColor: '#FFFFFF', areaColor: '#F4F4F4' },
       emphasis: { label: { show: false }, itemStyle: { areaColor: '#1565C0' } } }],
   }
@@ -384,7 +387,7 @@ onBeforeUnmount(() => {
 
     <!-- MAPA DE CALOR -->
     <div v-show="pestana === 'mapa'" class="panel mapa">
-      <v-chart v-if="mapaListo && datosMapa.length" :option="opcionesMapa" autoresize style="height: 640px" />
+      <v-chart v-if="mapaListo && datosMapa.length" :option="opcionesMapa" autoresize style="height: 720px" />
       <p class="texto-indicador">
         Los departamentos con colores más oscuros representan el grupo de las tasas más altas y
         disminuyendo el color a tasas más bajas.

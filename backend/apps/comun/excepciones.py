@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
-from .captura import ProcedimientoNoPermitidoError
+from .sistema_actual import ProcedimientoNoPermitidoError
 
 log = logging.getLogger(__name__)
 

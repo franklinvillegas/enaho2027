@@ -1,14 +1,14 @@
-"""La base de captura es de SOLO LECTURA para este sistema.
+"""La base del sistema actual (ENAHO2019_BDMONITOREO) es de SOLO LECTURA para este sistema.
 
 Ningún modelo de Django vive en ella, y no se permite escribir ni migrar ahí.
-Las lecturas a captura se hacen explícitamente con connections["captura"]
-desde los repositorios de cada módulo.
+Se lee explícitamente con connections["sistema_actual"] desde apps/comun/sistema_actual.py
+y apps/comun/autenticacion.py.
 """
 
-CAPTURA = "captura"
+SISTEMA_ACTUAL = "sistema_actual"
 
 
-class CapturaSoloLecturaRouter:
+class SistemaActualSoloLecturaRouter:
     def db_for_read(self, model, **hints):
         return "default"
 
@@ -19,4 +19,4 @@ class CapturaSoloLecturaRouter:
         return True
 
     def allow_migrate(self, db, app_label, model_name=None, **hints):
-        return db != CAPTURA
+        return db != SISTEMA_ACTUAL

@@ -84,14 +84,23 @@ def _sql_server(prefijo: str) -> dict:
 
 # Dos bases:
 #  - default: base de monitoreo, propia del sistema nuevo (lectura y escritura).
-#  - captura: ENAHO2014_BDCAPTURA, SOLO LECTURA. El router impide escribir o migrar en ella.
+#  - sistema_actual: la base del monitoreo actual (ENAHO2019_BDMONITOREO), SOLO LECTURA.
+#    Ahí están los procedimientos y los usuarios del sistema actual. El router impide
+#    escribir o migrar en ella.
 DATABASES = {
     "default": _sql_server("MONITOREO"),
-    "captura": _sql_server("CAPTURA"),
+    "sistema_actual": _sql_server("ACTUAL"),
 }
-DATABASE_ROUTERS = ["config.db_routers.CapturaSoloLecturaRouter"]
+DATABASE_ROUTERS = ["config.db_routers.SistemaActualSoloLecturaRouter"]
 
 AUTH_USER_MODEL = "comun.Usuario"
+
+# Login: primero con las cuentas del sistema actual (solo lectura), luego con las locales.
+AUTENTICAR_CON_SISTEMA_ACTUAL = env.bool("AUTENTICAR_CON_SISTEMA_ACTUAL", default=True)
+SISTEMA_ACTUAL_TABLA_USUARIOS = env("SISTEMA_ACTUAL_TABLA_USUARIOS", default="dbo.usuarios_usuario")
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
+if AUTENTICAR_CON_SISTEMA_ACTUAL:
+    AUTHENTICATION_BACKENDS.insert(0, "apps.comun.autenticacion.UsuarioSistemaActualBackend")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -141,7 +150,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_AGE = 60 * 60 * 8  # una jornada
 
 # Fuente de datos por módulo durante la migración (ver apps/<modulo>/repositorios.py)
-FUENTE_COBERTURA = env("FUENTE_COBERTURA", default="captura")
+FUENTE_COBERTURA = env("FUENTE_COBERTURA", default="sistema_actual")
 
 LOGGING = {
     "version": 1,

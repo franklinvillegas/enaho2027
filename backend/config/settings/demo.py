@@ -10,7 +10,7 @@ Usa SQLite local para usuarios y datos de EJEMPLO inventados para los indicadore
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "clave-solo-para-demo")
-for _base in ("MONITOREO", "CAPTURA"):
+for _base in ("MONITOREO", "ACTUAL"):
     for _campo in ("NAME", "HOST", "USER", "PASSWORD"):
         os.environ.setdefault(f"DB_{_base}_{_campo}", "demo")
 
@@ -19,6 +19,7 @@ from .dev import *  # noqa: E402,F401,F403
 
 DATABASES = {
     "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "demo.sqlite3"},
-    "captura": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+    "sistema_actual": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
 }
 FUENTE_COBERTURA = "demo"
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]

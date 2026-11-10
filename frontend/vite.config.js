@@ -12,8 +12,10 @@ export default defineConfig({
     port: 5173,
     // En desarrollo, /api va al backend Django: mismo origen, sin problemas de cookies.
     proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
-      '/admin': { target: 'http://localhost:8000', changeOrigin: true },
+      // 127.0.0.1 y no "localhost": en Windows, Node resuelve localhost a IPv6 (::1)
+      // y runserver escucha en IPv4, lo que da 502 Bad Gateway.
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/admin': { target: 'http://127.0.0.1:8000', changeOrigin: true },
     },
   },
   test: {

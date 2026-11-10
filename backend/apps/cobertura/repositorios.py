@@ -1,7 +1,7 @@
 """De dónde salen los datos de cobertura.
 
-Patrón Strangler Fig: hoy los datos salen de los procedimientos de la base de captura
-(RepositorioCaptura). Cuando existan las tablas resumen en la base de monitoreo, se
+Patrón Strangler Fig: hoy los datos salen de los procedimientos de la base del sistema actual
+(RepositorioSistemaActual). Cuando existan las tablas resumen en la base de monitoreo, se
 implementa RepositorioMonitoreo y se cambia FUENTE_COBERTURA en el .env. La API y el
 frontend no cambian.
 """
@@ -10,11 +10,13 @@ from typing import Protocol
 
 from django.conf import settings
 
-from apps.comun import captura
+from apps.comun import sistema_actual
 
 from .indicadores import INDICADORES, Indicador
 
-captura.registrar_procedimientos(*{p for i in INDICADORES.values() for p in i.procedimientos})
+sistema_actual.registrar_procedimientos(
+    *{p for i in INDICADORES.values() for p in i.procedimientos}
+)
 
 
 class RepositorioCobertura(Protocol):
@@ -23,15 +25,17 @@ class RepositorioCobertura(Protocol):
     def mapa(self, indicador: Indicador) -> list[dict]: ...
 
 
-class RepositorioCaptura:
-    """Lee de los procedimientos actuales en ENAHO2014_BDCAPTURA (solo lectura)."""
+class RepositorioSistemaActual:
+    """Lee de los procedimientos del sistema actual (ENAHO2019_BDMONITOREO, solo lectura)."""
 
     def consultar(self, indicador: Indicador, nivel: str, filtros: dict) -> list[dict]:
         consulta = indicador.niveles[nivel]
-        return captura.ejecutar_procedimiento(consulta.procedimiento, consulta.armar(filtros))
+        return sistema_actual.ejecutar_procedimiento(
+            consulta.procedimiento, consulta.armar(filtros)
+        )
 
     def mapa(self, indicador: Indicador) -> list[dict]:
-        return captura.ejecutar_procedimiento(indicador.mapa.procedimiento)
+        return sistema_actual.ejecutar_procedimiento(indicador.mapa.procedimiento)
 
 
 class RepositorioMonitoreo:
@@ -114,4 +118,4 @@ def obtener_repositorio() -> RepositorioCobertura:
         return RepositorioMonitoreo()
     if settings.FUENTE_COBERTURA == "demo":
         return RepositorioDemo()
-    return RepositorioCaptura()
+    return RepositorioSistemaActual()

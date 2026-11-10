@@ -1,6 +1,6 @@
-"""Acceso de SOLO LECTURA a la base de captura (ENAHO2014_BDCAPTURA).
+"""Acceso de SOLO LECTURA a la base del sistema actual (ENAHO2019_BDMONITOREO).
 
-Es la única puerta hacia la base de captura. Reglas:
+Ahí están los procedimientos del monitoreo actual. Es la única puerta para ejecutarlos. Reglas:
   - Solo ejecuta procedimientos de una lista blanca (PROCEDIMIENTOS_PERMITIDOS).
   - Los parámetros siempre van enlazados, nunca pegados al texto del SQL.
   - Devuelve filas como diccionarios.
@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 from django.db import connections
 
-from config.db_routers import CAPTURA
+from config.db_routers import SISTEMA_ACTUAL
 
 # Cada módulo registra aquí los procedimientos que usa mientras se migra.
 PROCEDIMIENTOS_PERMITIDOS: set[str] = set()
@@ -29,7 +29,7 @@ def ejecutar_procedimiento(nombre: str, parametros: Sequence = ()) -> list[dict]
         raise ProcedimientoNoPermitidoError(nombre)
     marcadores = ", ".join(["%s"] * len(parametros))
     sql = f"EXEC dbo.[{nombre}] {marcadores}".strip()
-    with connections[CAPTURA].cursor() as cursor:
+    with connections[SISTEMA_ACTUAL].cursor() as cursor:
         cursor.execute(sql, list(parametros))
         if cursor.description is None:
             return []

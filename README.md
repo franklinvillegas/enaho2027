@@ -38,14 +38,19 @@ npm run dev
 Abrir http://localhost:5173 e ingresar con el usuario creado. Para que el menú muestre
 módulos, el usuario debe tener `permisos` = 1 o 2 (el superusuario ve todo).
 
-## Levantarlo con SQL Server (oficina)
+## Levantarlo con la base del sistema actual (oficina)
 
-1. Copiar `backend/.env.example` a `backend/.env` y completar las dos conexiones:
-   - **Base de monitoreo**: base nueva y propia del sistema (usuarios, registro de uso,
-     y luego las tablas resumen).
-   - **Base de captura**: `ENAHO2014_BDCAPTURA`, **solo lectura**. Idealmente una réplica.
-2. `python manage.py migrate` (crea las tablas solo en la base de monitoreo).
-3. `python manage.py runserver`.
+Modo **local**: lee los procedimientos y los usuarios del sistema actual
+(`ENAHO2019_BDMONITOREO`, **solo lectura**) y guarda lo propio en un SQLite local.
+Se entra con el mismo usuario y contraseña del monitoreo actual.
+
+1. Copiar `backend/.env.example` a `backend/.env` y completar `DJANGO_SECRET_KEY` y la
+   conexión `DB_ACTUAL_*` (la misma que usa el sistema actual).
+2. `python manage.py migrate --settings=config.settings.local`
+3. `python manage.py runserver --settings=config.settings.local`
+
+Cuando exista la base de monitoreo nueva, se completa `DB_MONITOREO_*` y se usa
+`config.settings.dev` (o `prod` en el servidor).
 
 ## Pruebas y calidad
 

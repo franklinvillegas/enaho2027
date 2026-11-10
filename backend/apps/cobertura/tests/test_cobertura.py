@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
 
 from apps.cobertura import repositorios, servicios
 from apps.cobertura.indicadores import INDICADORES
-from apps.comun import captura
+from apps.comun import sistema_actual
 from apps.comun.filtros import Nivel
 
 URL = "/api/v1/cobertura/indicadores/tnr-total/"
@@ -12,7 +12,7 @@ RANGO = {"periodo_inicio": 1, "periodo_fin": 3, "mes_inicio": 1, "mes_fin": 6}
 
 
 class RepositorioFalso:
-    """Reemplaza a la base de captura en las pruebas y guarda lo que se le pidió."""
+    """Reemplaza a la base del sistema actual en las pruebas y guarda lo que se le pidió."""
 
     def __init__(self):
         self.llamadas = []
@@ -106,9 +106,9 @@ def test_nivel_no_disponible():
 def test_todos_los_procedimientos_estan_en_la_lista_blanca():
     assert repositorios  # importar el módulo registra la lista blanca
     for indicador in INDICADORES.values():
-        assert indicador.procedimientos <= captura.PROCEDIMIENTOS_PERMITIDOS
+        assert indicador.procedimientos <= sistema_actual.PROCEDIMIENTOS_PERMITIDOS
 
 
-def test_captura_rechaza_procedimientos_fuera_de_la_lista():
-    with pytest.raises(captura.ProcedimientoNoPermitidoError):
-        captura.ejecutar_procedimiento("sp_cualquiera")
+def test_sistema_actual_rechaza_procedimientos_fuera_de_la_lista():
+    with pytest.raises(sistema_actual.ProcedimientoNoPermitidoError):
+        sistema_actual.ejecutar_procedimiento("sp_cualquiera")

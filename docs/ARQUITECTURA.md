@@ -3,14 +3,17 @@
 ## Visión general
 
 ```
-Navegador (Vue 3)  ──HTTP/JSON──▶  API Django REST  ──▶  Base de monitoreo (lectura/escritura)
+Navegador (Vue 3)  ──HTTP/JSON──▶  API Django REST  ──▶  Base de monitoreo nueva (lectura/escritura)
                                          │
-                                         └──solo lectura──▶  Base de captura ENAHO2014_BDCAPTURA
+                                         └──solo lectura──▶  Base del sistema actual ENAHO2019_BDMONITOREO
+                                                              (procedimientos y usuarios del monitoreo actual)
 ```
 
 - **Monolito modular**: un solo proyecto Django con una app por módulo del menú.
-- **La base de captura no se modifica.** Solo se lee, desde un único punto
-  (`apps/comun/captura.py`), con una lista blanca de procedimientos y parámetros enlazados.
+- **La base del sistema actual no se modifica.** Solo se lee, desde un único punto
+  (`apps/comun/sistema_actual.py`), con una lista blanca de procedimientos y parámetros
+  enlazados. Los usuarios entran con su mismo usuario y contraseña del sistema actual
+  (`apps/comun/autenticacion.py`); la contraseña no se copia.
 - **Migración progresiva (Strangler Fig).** Cada módulo empieza leyendo los procedimientos
   actuales y luego pasa a tablas resumen propias, sin cambiar la API ni el frontend.
 
@@ -21,10 +24,11 @@ backend/
 ├── config/                 Configuración (settings por entorno, rutas, router de bases)
 │   ├── settings/base.py    Común. Todo lo sensible viene del .env
 │   ├── settings/dev.py     Desarrollo
+│   ├── settings/local.py   Datos y usuarios reales del sistema actual + SQLite propio
 │   ├── settings/demo.py    Demo sin SQL Server (SQLite + datos de ejemplo)
 │   ├── settings/test.py    Pruebas automáticas
 │   ├── settings/prod.py    Producción (cookies seguras, cabeceras)
-│   └── db_routers.py       Impide escribir o migrar en la base de captura
+│   └── db_routers.py       Impide escribir o migrar en la base del sistema actual
 └── apps/
     ├── comun/              Usuarios, acceso por cargo, filtros, registro de uso, Excel
     ├── cobertura/          PILOTO
@@ -40,12 +44,12 @@ backend/
 | Archivo | Responsabilidad | Conoce SQL | Conoce HTTP |
 |---|---|---|---|
 | `indicadores.py` | Catálogo: qué indicadores hay y qué procedimiento usa cada nivel | No | No |
-| `repositorios.py` | De dónde salen los datos (captura, monitoreo o demo) | Sí | No |
+| `repositorios.py` | De dónde salen los datos (sistema actual, monitoreo o demo) | Sí | No |
 | `servicios.py` | Reglas del caso de uso | No | No |
 | `views.py` | Endpoints: valida filtros, aplica permisos, responde JSON o Excel | No | Sí |
 
 Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
-(`FUENTE_COBERTURA=captura | monitoreo | demo`).
+(`FUENTE_COBERTURA=sistema_actual | monitoreo | demo`).
 
 ### Seguridad
 
@@ -100,7 +104,7 @@ indicadores de cobertura; solo cambia el código del indicador.
 
 ## Decisiones pendientes
 
-- Cómo se migran las cuentas de usuario del sistema actual (y si se integra con el
+- Cuándo dejar de validar contra las cuentas del sistema actual (y si se integra con el
   directorio del INEI).
 - Licencia de gráficos: se usa ECharts (libre). Highcharts requiere licencia.
 - Formato exacto de periodo y mes, y validación del rango (se confirma con los procedimientos).

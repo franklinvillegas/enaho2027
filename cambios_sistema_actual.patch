@@ -1,0 +1,629 @@
+diff --git a/.gitignore b/.gitignore
+index 6ff1536..75e27bc 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -4,7 +4,7 @@ __pycache__/
+ .venv/
+ venv/
+ backend/.env
+-backend/demo.sqlite3
++backend/*.sqlite3
+ backend/staticfiles/
+ 
+ # Node
+diff --git a/README.md b/README.md
+index f8aef73..4acd631 100644
+--- a/README.md
++++ b/README.md
+@@ -38,14 +38,19 @@ npm run dev
+ Abrir http://localhost:5173 e ingresar con el usuario creado. Para que el menú muestre
+ módulos, el usuario debe tener `permisos` = 1 o 2 (el superusuario ve todo).
+ 
+-## Levantarlo con SQL Server (oficina)
+-
+-1. Copiar `backend/.env.example` a `backend/.env` y completar las dos conexiones:
+-   - **Base de monitoreo**: base nueva y propia del sistema (usuarios, registro de uso,
+-     y luego las tablas resumen).
+-   - **Base de captura**: `ENAHO2014_BDCAPTURA`, **solo lectura**. Idealmente una réplica.
+-2. `python manage.py migrate` (crea las tablas solo en la base de monitoreo).
+-3. `python manage.py runserver`.
++## Levantarlo con la base del sistema actual (oficina)
++
++Modo **local**: lee los procedimientos y los usuarios del sistema actual
++(`ENAHO2019_BDMONITOREO`, **solo lectura**) y guarda lo propio en un SQLite local.
++Se entra con el mismo usuario y contraseña del monitoreo actual.
++
++1. Copiar `backend/.env.example` a `backend/.env` y completar `DJANGO_SECRET_KEY` y la
++   conexión `DB_ACTUAL_*` (la misma que usa el sistema actual).
++2. `python manage.py migrate --settings=config.settings.local`
++3. `python manage.py runserver --settings=config.settings.local`
++
++Cuando exista la base de monitoreo nueva, se completa `DB_MONITOREO_*` y se usa
++`config.settings.dev` (o `prod` en el servidor).
+ 
+ ## Pruebas y calidad
+ 
+diff --git a/backend/.env.example b/backend/.env.example
+index b679706..5f52999 100644
+--- a/backend/.env.example
++++ b/backend/.env.example
+@@ -4,28 +4,35 @@ DJANGO_SECRET_KEY=cambiar-por-una-clave-larga-y-aleatoria
+ DJANGO_DEBUG=True
+ DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
+ 
+-# Base de monitoreo (propia del sistema nuevo: usuarios, registro de uso, tablas resumen)
++# Base de monitoreo NUEVA (propia del sistema nuevo: usuarios, registro de uso, tablas
++# resumen). En modo local (settings/local.py) no se usa: va a un SQLite.
+ DB_MONITOREO_NAME=ENAHO_MONITOREO
+ DB_MONITOREO_HOST=localhost
+ DB_MONITOREO_PORT=1433
+ DB_MONITOREO_USER=
+ DB_MONITOREO_PASSWORD=
+ 
+-# Base de captura (SOLO LECTURA). Idealmente una réplica, no el servidor principal.
+-DB_CAPTURA_NAME=ENAHO2014_BDCAPTURA
+-DB_CAPTURA_HOST=
+-DB_CAPTURA_PORT=1433
+-DB_CAPTURA_USER=
+-DB_CAPTURA_PASSWORD=
++# Base del sistema actual (SOLO LECTURA): donde están los procedimientos y los usuarios
++# del monitoreo actual. Es la misma que usa monitoreo-enaho-v2 (settings/local.py).
++# Ideal: un usuario de SQL Server con permisos solo de lectura y EXECUTE.
++DB_ACTUAL_NAME=ENAHO2019_BDMONITOREO
++DB_ACTUAL_HOST=
++DB_ACTUAL_PORT=1433
++DB_ACTUAL_USER=
++DB_ACTUAL_PASSWORD=
+ 
+-# Driver ODBC instalado en el servidor
+-DB_ODBC_DRIVER=ODBC Driver 18 for SQL Server
++# Driver ODBC instalado en la PC o servidor (el sistema actual usa el 17)
++DB_ODBC_DRIVER=ODBC Driver 17 for SQL Server
+ DB_TRUST_SERVER_CERTIFICATE=yes
+ 
+ # Origen del frontend en desarrollo (Vite)
+ CORS_ALLOWED_ORIGINS=http://localhost:5173
+ CSRF_TRUSTED_ORIGINS=http://localhost:5173
+ 
+-# De dónde lee cada módulo mientras dura la migración: "captura" (procedimientos actuales)
+-# o "monitoreo" (tablas resumen nuevas)
+-FUENTE_COBERTURA=captura
++# Login con los usuarios del sistema actual (solo lectura de su tabla de usuarios)
++AUTENTICAR_CON_SISTEMA_ACTUAL=True
++SISTEMA_ACTUAL_TABLA_USUARIOS=dbo.usuarios_usuario
++
++# De dónde lee cada módulo mientras dura la migración: "sistema_actual" (procedimientos
++# actuales), "monitoreo" (tablas resumen nuevas) o "demo" (datos inventados)
++FUENTE_COBERTURA=sistema_actual
+diff --git a/backend/apps/cobertura/repositorios.py b/backend/apps/cobertura/repositorios.py
+index 1a46fb3..2b884fc 100644
+--- a/backend/apps/cobertura/repositorios.py
++++ b/backend/apps/cobertura/repositorios.py
+@@ -1,7 +1,7 @@
+ """De dónde salen los datos de cobertura.
+ 
+-Patrón Strangler Fig: hoy los datos salen de los procedimientos de la base de captura
+-(RepositorioCaptura). Cuando existan las tablas resumen en la base de monitoreo, se
++Patrón Strangler Fig: hoy los datos salen de los procedimientos de la base del sistema actual
++(RepositorioSistemaActual). Cuando existan las tablas resumen en la base de monitoreo, se
+ implementa RepositorioMonitoreo y se cambia FUENTE_COBERTURA en el .env. La API y el
+ frontend no cambian.
+ """
+@@ -10,11 +10,13 @@ from typing import Protocol
+ 
+ from django.conf import settings
+ 
+-from apps.comun import captura
++from apps.comun import sistema_actual
+ 
+ from .indicadores import INDICADORES, Indicador
+ 
+-captura.registrar_procedimientos(*{p for i in INDICADORES.values() for p in i.procedimientos})
++sistema_actual.registrar_procedimientos(
++    *{p for i in INDICADORES.values() for p in i.procedimientos}
++)
+ 
+ 
+ class RepositorioCobertura(Protocol):
+@@ -23,15 +25,17 @@ class RepositorioCobertura(Protocol):
+     def mapa(self, indicador: Indicador) -> list[dict]: ...
+ 
+ 
+-class RepositorioCaptura:
+-    """Lee de los procedimientos actuales en ENAHO2014_BDCAPTURA (solo lectura)."""
++class RepositorioSistemaActual:
++    """Lee de los procedimientos del sistema actual (ENAHO2019_BDMONITOREO, solo lectura)."""
+ 
+     def consultar(self, indicador: Indicador, nivel: str, filtros: dict) -> list[dict]:
+         consulta = indicador.niveles[nivel]
+-        return captura.ejecutar_procedimiento(consulta.procedimiento, consulta.armar(filtros))
++        return sistema_actual.ejecutar_procedimiento(
++            consulta.procedimiento, consulta.armar(filtros)
++        )
+ 
+     def mapa(self, indicador: Indicador) -> list[dict]:
+-        return captura.ejecutar_procedimiento(indicador.mapa.procedimiento)
++        return sistema_actual.ejecutar_procedimiento(indicador.mapa.procedimiento)
+ 
+ 
+ class RepositorioMonitoreo:
+@@ -114,4 +118,4 @@ def obtener_repositorio() -> RepositorioCobertura:
+         return RepositorioMonitoreo()
+     if settings.FUENTE_COBERTURA == "demo":
+         return RepositorioDemo()
+-    return RepositorioCaptura()
++    return RepositorioSistemaActual()
+diff --git a/backend/apps/cobertura/tests/test_cobertura.py b/backend/apps/cobertura/tests/test_cobertura.py
+index 8d44063..277846a 100644
+--- a/backend/apps/cobertura/tests/test_cobertura.py
++++ b/backend/apps/cobertura/tests/test_cobertura.py
+@@ -4,7 +4,7 @@ from rest_framework.test import APIClient
+ 
+ from apps.cobertura import repositorios, servicios
+ from apps.cobertura.indicadores import INDICADORES
+-from apps.comun import captura
++from apps.comun import sistema_actual
+ from apps.comun.filtros import Nivel
+ 
+ URL = "/api/v1/cobertura/indicadores/tnr-total/"
+@@ -12,7 +12,7 @@ RANGO = {"periodo_inicio": 1, "periodo_fin": 3, "mes_inicio": 1, "mes_fin": 6}
+ 
+ 
+ class RepositorioFalso:
+-    """Reemplaza a la base de captura en las pruebas y guarda lo que se le pidió."""
++    """Reemplaza a la base del sistema actual en las pruebas y guarda lo que se le pidió."""
+ 
+     def __init__(self):
+         self.llamadas = []
+@@ -106,9 +106,9 @@ def test_nivel_no_disponible():
+ def test_todos_los_procedimientos_estan_en_la_lista_blanca():
+     assert repositorios  # importar el módulo registra la lista blanca
+     for indicador in INDICADORES.values():
+-        assert indicador.procedimientos <= captura.PROCEDIMIENTOS_PERMITIDOS
++        assert indicador.procedimientos <= sistema_actual.PROCEDIMIENTOS_PERMITIDOS
+ 
+ 
+-def test_captura_rechaza_procedimientos_fuera_de_la_lista():
+-    with pytest.raises(captura.ProcedimientoNoPermitidoError):
+-        captura.ejecutar_procedimiento("sp_cualquiera")
++def test_sistema_actual_rechaza_procedimientos_fuera_de_la_lista():
++    with pytest.raises(sistema_actual.ProcedimientoNoPermitidoError):
++        sistema_actual.ejecutar_procedimiento("sp_cualquiera")
+diff --git a/b/backend/apps/comun/autenticacion.py b/backend/apps/comun/autenticacion.py
+new file mode 100644
+index 0000000..3b55048
+--- /dev/null
++++ b/backend/apps/comun/autenticacion.py
+@@ -0,0 +1,68 @@
++"""Login con los usuarios del sistema actual.
++
++Mientras conviven los dos sistemas, el usuario entra con su mismo usuario y contraseña
++de siempre. Este backend:
++
++  1. Lee la cuenta en la tabla de usuarios del sistema actual (SOLO LECTURA).
++  2. Verifica la contraseña contra el hash que guarda Django en esa tabla.
++  3. Crea o actualiza una copia local del usuario (ODEI, cargo, permisos), SIN contraseña.
++
++La contraseña nunca se copia: la fuente de verdad sigue siendo el sistema actual. Si una
++cuenta no existe allí, se intenta con las cuentas locales (ModelBackend), por ejemplo el
++administrador del sistema nuevo.
++"""
++
++import logging
++
++from django.conf import settings
++from django.contrib.auth.backends import BaseBackend
++from django.contrib.auth.hashers import check_password
++from django.db import DatabaseError, connections
++
++from config.db_routers import SISTEMA_ACTUAL
++
++from .models import Usuario
++
++log = logging.getLogger(__name__)
++
++CAMPOS = ["usuario", "password", "is_active", "dni", "nombres", "apellidos", "email",
++          "odei", "cargo", "permisos"]  # fmt: skip
++
++
++def leer_usuario_actual(usuario: str) -> dict | None:
++    tabla = settings.SISTEMA_ACTUAL_TABLA_USUARIOS
++    columnas = ", ".join(f"[{c}]" for c in CAMPOS)
++    sql = f"SELECT {columnas} FROM {tabla} WHERE [usuario] = %s"
++    with connections[SISTEMA_ACTUAL].cursor() as cursor:
++        cursor.execute(sql, [usuario])
++        fila = cursor.fetchone()
++    return dict(zip(CAMPOS, fila, strict=True)) if fila else None
++
++
++class UsuarioSistemaActualBackend(BaseBackend):
++    def authenticate(self, request, usuario=None, password=None, **kwargs):
++        if not usuario or not password:
++            return None
++        try:
++            cuenta = leer_usuario_actual(usuario)
++        except DatabaseError:
++            log.exception("No se pudo leer el usuario en el sistema actual")
++            return None
++        if not cuenta or not cuenta["is_active"] or not cuenta["password"]:
++            return None
++        if not check_password(password, cuenta["password"]):
++            return None
++
++        local, _ = Usuario.objects.get_or_create(usuario=cuenta["usuario"])
++        for campo in ["dni", "nombres", "apellidos", "email", "odei", "cargo", "permisos"]:
++            setattr(local, campo, (cuenta[campo] or "").strip())
++        local.is_active = True
++        local.set_unusable_password()
++        local.save()
++        return local
++
++    def get_user(self, user_id):
++        try:
++            return Usuario.objects.get(pk=user_id, is_active=True)
++        except Usuario.DoesNotExist:
++            return None
+diff --git a/backend/apps/comun/excepciones.py b/backend/apps/comun/excepciones.py
+index 3adfa72..1557c21 100644
+--- a/backend/apps/comun/excepciones.py
++++ b/backend/apps/comun/excepciones.py
+@@ -5,7 +5,7 @@ from rest_framework import status
+ from rest_framework.response import Response
+ from rest_framework.views import exception_handler
+ 
+-from .captura import ProcedimientoNoPermitidoError
++from .sistema_actual import ProcedimientoNoPermitidoError
+ 
+ log = logging.getLogger(__name__)
+ 
+diff --git a/backend/apps/comun/captura.py b/backend/apps/comun/sistema_actual.py
+similarity index 79%
+rename from backend/apps/comun/captura.py
+rename to backend/apps/comun/sistema_actual.py
+index f379bda..7ca8ff8 100644
+--- a/backend/apps/comun/captura.py
++++ b/backend/apps/comun/sistema_actual.py
+@@ -1,6 +1,6 @@
+-"""Acceso de SOLO LECTURA a la base de captura (ENAHO2014_BDCAPTURA).
++"""Acceso de SOLO LECTURA a la base del sistema actual (ENAHO2019_BDMONITOREO).
+ 
+-Es la única puerta hacia la base de captura. Reglas:
++Ahí están los procedimientos del monitoreo actual. Es la única puerta para ejecutarlos. Reglas:
+   - Solo ejecuta procedimientos de una lista blanca (PROCEDIMIENTOS_PERMITIDOS).
+   - Los parámetros siempre van enlazados, nunca pegados al texto del SQL.
+   - Devuelve filas como diccionarios.
+@@ -10,7 +10,7 @@ from collections.abc import Sequence
+ 
+ from django.db import connections
+ 
+-from config.db_routers import CAPTURA
++from config.db_routers import SISTEMA_ACTUAL
+ 
+ # Cada módulo registra aquí los procedimientos que usa mientras se migra.
+ PROCEDIMIENTOS_PERMITIDOS: set[str] = set()
+@@ -29,7 +29,7 @@ def ejecutar_procedimiento(nombre: str, parametros: Sequence = ()) -> list[dict]
+         raise ProcedimientoNoPermitidoError(nombre)
+     marcadores = ", ".join(["%s"] * len(parametros))
+     sql = f"EXEC dbo.[{nombre}] {marcadores}".strip()
+-    with connections[CAPTURA].cursor() as cursor:
++    with connections[SISTEMA_ACTUAL].cursor() as cursor:
+         cursor.execute(sql, list(parametros))
+         if cursor.description is None:
+             return []
+diff --git a/b/backend/apps/comun/tests/test_autenticacion.py b/backend/apps/comun/tests/test_autenticacion.py
+new file mode 100644
+index 0000000..f5487ac
+--- /dev/null
++++ b/backend/apps/comun/tests/test_autenticacion.py
+@@ -0,0 +1,65 @@
++import pytest
++from django.contrib.auth import authenticate
++from django.contrib.auth.hashers import make_password
++
++from apps.comun import autenticacion
++from apps.comun.models import Usuario
++
++
++def cuenta(**campos):
++    base = {
++        "usuario": "jperez",
++        "password": make_password("clave-del-sistema-actual"),
++        "is_active": True,
++        "dni": "12345678",
++        "nombres": "JUAN",
++        "apellidos": "PEREZ",
++        "email": "",
++        "odei": "15",
++        "cargo": "09",
++        "permisos": "1",
++    }
++    return base | campos
++
++
++@pytest.fixture
++def sistema_actual(monkeypatch):
++    cuentas = {}
++    monkeypatch.setattr(autenticacion, "leer_usuario_actual", lambda u: cuentas.get(u))
++    return cuentas
++
++
++@pytest.mark.django_db
++def test_entra_con_la_contrasena_del_sistema_actual_y_no_la_copia(sistema_actual):
++    sistema_actual["jperez"] = cuenta()
++    u = authenticate(None, usuario="jperez", password="clave-del-sistema-actual")
++    assert u is not None
++    assert (u.odei, u.cargo, u.permisos) == ("15", "09", "1")
++    assert not u.has_usable_password()
++
++
++@pytest.mark.django_db
++def test_contrasena_incorrecta(sistema_actual):
++    sistema_actual["jperez"] = cuenta()
++    assert authenticate(None, usuario="jperez", password="otra") is None
++
++
++@pytest.mark.django_db
++def test_cuenta_desactivada_en_el_sistema_actual(sistema_actual):
++    sistema_actual["jperez"] = cuenta(is_active=False)
++    assert authenticate(None, usuario="jperez", password="clave-del-sistema-actual") is None
++
++
++@pytest.mark.django_db
++def test_los_cambios_de_cargo_se_actualizan_al_entrar(sistema_actual):
++    sistema_actual["jperez"] = cuenta()
++    authenticate(None, usuario="jperez", password="clave-del-sistema-actual")
++    sistema_actual["jperez"] = cuenta(cargo="05")
++    authenticate(None, usuario="jperez", password="clave-del-sistema-actual")
++    assert Usuario.objects.get(usuario="jperez").cargo == "05"
++
++
++@pytest.mark.django_db
++def test_cuentas_locales_siguen_funcionando(sistema_actual, django_user_model):
++    django_user_model.objects.create_user(usuario="admin", password="clave-local-123")
++    assert authenticate(None, usuario="admin", password="clave-local-123") is not None
+diff --git a/backend/config/db_routers.py b/backend/config/db_routers.py
+index 95268b7..3b17efa 100644
+--- a/backend/config/db_routers.py
++++ b/backend/config/db_routers.py
+@@ -1,14 +1,14 @@
+-"""La base de captura es de SOLO LECTURA para este sistema.
++"""La base del sistema actual (ENAHO2019_BDMONITOREO) es de SOLO LECTURA para este sistema.
+ 
+ Ningún modelo de Django vive en ella, y no se permite escribir ni migrar ahí.
+-Las lecturas a captura se hacen explícitamente con connections["captura"]
+-desde los repositorios de cada módulo.
++Se lee explícitamente con connections["sistema_actual"] desde apps/comun/sistema_actual.py
++y apps/comun/autenticacion.py.
+ """
+ 
+-CAPTURA = "captura"
++SISTEMA_ACTUAL = "sistema_actual"
+ 
+ 
+-class CapturaSoloLecturaRouter:
++class SistemaActualSoloLecturaRouter:
+     def db_for_read(self, model, **hints):
+         return "default"
+ 
+@@ -19,4 +19,4 @@ class CapturaSoloLecturaRouter:
+         return True
+ 
+     def allow_migrate(self, db, app_label, model_name=None, **hints):
+-        return db != CAPTURA
++        return db != SISTEMA_ACTUAL
+diff --git a/backend/config/settings/base.py b/backend/config/settings/base.py
+index ce4f431..01325db 100644
+--- a/backend/config/settings/base.py
++++ b/backend/config/settings/base.py
+@@ -84,15 +84,24 @@ def _sql_server(prefijo: str) -> dict:
+ 
+ # Dos bases:
+ #  - default: base de monitoreo, propia del sistema nuevo (lectura y escritura).
+-#  - captura: ENAHO2014_BDCAPTURA, SOLO LECTURA. El router impide escribir o migrar en ella.
++#  - sistema_actual: la base del monitoreo actual (ENAHO2019_BDMONITOREO), SOLO LECTURA.
++#    Ahí están los procedimientos y los usuarios del sistema actual. El router impide
++#    escribir o migrar en ella.
+ DATABASES = {
+     "default": _sql_server("MONITOREO"),
+-    "captura": _sql_server("CAPTURA"),
++    "sistema_actual": _sql_server("ACTUAL"),
+ }
+-DATABASE_ROUTERS = ["config.db_routers.CapturaSoloLecturaRouter"]
++DATABASE_ROUTERS = ["config.db_routers.SistemaActualSoloLecturaRouter"]
+ 
+ AUTH_USER_MODEL = "comun.Usuario"
+ 
++# Login: primero con las cuentas del sistema actual (solo lectura), luego con las locales.
++AUTENTICAR_CON_SISTEMA_ACTUAL = env.bool("AUTENTICAR_CON_SISTEMA_ACTUAL", default=True)
++SISTEMA_ACTUAL_TABLA_USUARIOS = env("SISTEMA_ACTUAL_TABLA_USUARIOS", default="dbo.usuarios_usuario")
++AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
++if AUTENTICAR_CON_SISTEMA_ACTUAL:
++    AUTHENTICATION_BACKENDS.insert(0, "apps.comun.autenticacion.UsuarioSistemaActualBackend")
++
+ AUTH_PASSWORD_VALIDATORS = [
+     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+@@ -141,7 +150,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
+ SESSION_COOKIE_AGE = 60 * 60 * 8  # una jornada
+ 
+ # Fuente de datos por módulo durante la migración (ver apps/<modulo>/repositorios.py)
+-FUENTE_COBERTURA = env("FUENTE_COBERTURA", default="captura")
++FUENTE_COBERTURA = env("FUENTE_COBERTURA", default="sistema_actual")
+ 
+ LOGGING = {
+     "version": 1,
+diff --git a/backend/config/settings/demo.py b/backend/config/settings/demo.py
+index e679e10..ba993eb 100644
+--- a/backend/config/settings/demo.py
++++ b/backend/config/settings/demo.py
+@@ -10,7 +10,7 @@ Usa SQLite local para usuarios y datos de EJEMPLO inventados para los indicadore
+ import os
+ 
+ os.environ.setdefault("DJANGO_SECRET_KEY", "clave-solo-para-demo")
+-for _base in ("MONITOREO", "CAPTURA"):
++for _base in ("MONITOREO", "ACTUAL"):
+     for _campo in ("NAME", "HOST", "USER", "PASSWORD"):
+         os.environ.setdefault(f"DB_{_base}_{_campo}", "demo")
+ 
+@@ -19,6 +19,7 @@ from .dev import *  # noqa: E402,F401,F403
+ 
+ DATABASES = {
+     "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "demo.sqlite3"},
+-    "captura": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
++    "sistema_actual": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+ }
+ FUENTE_COBERTURA = "demo"
++AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
+diff --git a/b/backend/config/settings/local.py b/backend/config/settings/local.py
+new file mode 100644
+index 0000000..9e7105e
+--- /dev/null
++++ b/backend/config/settings/local.py
+@@ -0,0 +1,25 @@
++"""Modo LOCAL: datos reales del sistema actual, sin crear todavía la base de monitoreo.
++
++- Lee procedimientos y usuarios de la base del sistema actual (ENAHO2019_BDMONITOREO),
++  en SOLO LECTURA, con la conexión DB_ACTUAL_* del .env.
++- Las tablas propias del sistema nuevo (sesiones, copia de usuarios, registro de uso)
++  van a un SQLite local, hasta que exista la base de monitoreo nueva.
++- Login con el mismo usuario y contraseña del sistema actual.
++
++    python manage.py migrate --settings=config.settings.local
++    python manage.py runserver --settings=config.settings.local
++"""
++
++import os
++
++for _campo in ("NAME", "HOST", "USER", "PASSWORD"):
++    os.environ.setdefault(f"DB_MONITOREO_{_campo}", "no-se-usa-en-local")
++
++from .base import BASE_DIR  # noqa: E402
++from .dev import *  # noqa: E402,F401,F403
++
++DATABASES["default"] = {  # noqa: F405
++    "ENGINE": "django.db.backends.sqlite3",
++    "NAME": BASE_DIR / "local.sqlite3",
++}
++FUENTE_COBERTURA = "sistema_actual"
+diff --git a/backend/config/settings/test.py b/backend/config/settings/test.py
+index fbf7b1c..ba62332 100644
+--- a/backend/config/settings/test.py
++++ b/backend/config/settings/test.py
+@@ -1,13 +1,13 @@
+ """Pruebas automáticas: SQLite en memoria, sin SQL Server.
+ 
+-La lógica que toca la base de captura se prueba con repositorios falsos
++La lógica que toca la base del sistema actual se prueba con repositorios falsos
+ (ver apps/cobertura/tests).
+ """
+ 
+ import os
+ 
+ os.environ.setdefault("DJANGO_SECRET_KEY", "clave-solo-para-pruebas")
+-for _base in ("MONITOREO", "CAPTURA"):
++for _base in ("MONITOREO", "ACTUAL"):
+     for _campo in ("NAME", "HOST", "USER", "PASSWORD"):
+         os.environ.setdefault(f"DB_{_base}_{_campo}", "pruebas")
+ 
+@@ -15,6 +15,6 @@ from .base import *  # noqa: E402,F401,F403
+ 
+ DATABASES = {
+     "default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+-    "captura": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
++    "sistema_actual": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"},
+ }
+ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+diff --git a/b/backend/conftest.py b/backend/conftest.py
+new file mode 100644
+index 0000000..ab4eb3e
+--- /dev/null
++++ b/backend/conftest.py
+@@ -0,0 +1,8 @@
++import pytest
++
++
++@pytest.fixture(autouse=True)
++def sin_sistema_actual(monkeypatch):
++    """Las pruebas nunca consultan la base del sistema actual: por defecto no hay cuentas
++    allí. Las pruebas de autenticación reemplazan esta función con cuentas de ejemplo."""
++    monkeypatch.setattr("apps.comun.autenticacion.leer_usuario_actual", lambda usuario: None)
+diff --git a/docs/ARQUITECTURA.md b/docs/ARQUITECTURA.md
+index b10430f..8bb38ce 100644
+--- a/docs/ARQUITECTURA.md
++++ b/docs/ARQUITECTURA.md
+@@ -3,14 +3,17 @@
+ ## Visión general
+ 
+ ```
+-Navegador (Vue 3)  ──HTTP/JSON──▶  API Django REST  ──▶  Base de monitoreo (lectura/escritura)
++Navegador (Vue 3)  ──HTTP/JSON──▶  API Django REST  ──▶  Base de monitoreo nueva (lectura/escritura)
+                                          │
+-                                         └──solo lectura──▶  Base de captura ENAHO2014_BDCAPTURA
++                                         └──solo lectura──▶  Base del sistema actual ENAHO2019_BDMONITOREO
++                                                              (procedimientos y usuarios del monitoreo actual)
+ ```
+ 
+ - **Monolito modular**: un solo proyecto Django con una app por módulo del menú.
+-- **La base de captura no se modifica.** Solo se lee, desde un único punto
+-  (`apps/comun/captura.py`), con una lista blanca de procedimientos y parámetros enlazados.
++- **La base del sistema actual no se modifica.** Solo se lee, desde un único punto
++  (`apps/comun/sistema_actual.py`), con una lista blanca de procedimientos y parámetros
++  enlazados. Los usuarios entran con su mismo usuario y contraseña del sistema actual
++  (`apps/comun/autenticacion.py`); la contraseña no se copia.
+ - **Migración progresiva (Strangler Fig).** Cada módulo empieza leyendo los procedimientos
+   actuales y luego pasa a tablas resumen propias, sin cambiar la API ni el frontend.
+ 
+@@ -21,10 +24,11 @@ backend/
+ ├── config/                 Configuración (settings por entorno, rutas, router de bases)
+ │   ├── settings/base.py    Común. Todo lo sensible viene del .env
+ │   ├── settings/dev.py     Desarrollo
++│   ├── settings/local.py   Datos y usuarios reales del sistema actual + SQLite propio
+ │   ├── settings/demo.py    Demo sin SQL Server (SQLite + datos de ejemplo)
+ │   ├── settings/test.py    Pruebas automáticas
+ │   ├── settings/prod.py    Producción (cookies seguras, cabeceras)
+-│   └── db_routers.py       Impide escribir o migrar en la base de captura
++│   └── db_routers.py       Impide escribir o migrar en la base del sistema actual
+ └── apps/
+     ├── comun/              Usuarios, acceso por cargo, filtros, registro de uso, Excel
+     ├── cobertura/          PILOTO
+@@ -40,12 +44,12 @@ backend/
+ | Archivo | Responsabilidad | Conoce SQL | Conoce HTTP |
+ |---|---|---|---|
+ | `indicadores.py` | Catálogo: qué indicadores hay y qué procedimiento usa cada nivel | No | No |
+-| `repositorios.py` | De dónde salen los datos (captura, monitoreo o demo) | Sí | No |
++| `repositorios.py` | De dónde salen los datos (sistema actual, monitoreo o demo) | Sí | No |
+ | `servicios.py` | Reglas del caso de uso | No | No |
+ | `views.py` | Endpoints: valida filtros, aplica permisos, responde JSON o Excel | No | Sí |
+ 
+ Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
+-(`FUENTE_COBERTURA=captura | monitoreo | demo`).
++(`FUENTE_COBERTURA=sistema_actual | monitoreo | demo`).
+ 
+ ### Seguridad
+ 
+@@ -100,7 +104,7 @@ indicadores de cobertura; solo cambia el código del indicador.
+ 
+ ## Decisiones pendientes
+ 
+-- Cómo se migran las cuentas de usuario del sistema actual (y si se integra con el
++- Cuándo dejar de validar contra las cuentas del sistema actual (y si se integra con el
+   directorio del INEI).
+ - Licencia de gráficos: se usa ECharts (libre). Highcharts requiere licencia.
+ - Formato exacto de periodo y mes, y validación del rango (se confirma con los procedimientos).
+diff --git a/frontend/vite.config.js b/frontend/vite.config.js
+index 2fd0613..12dccda 100644
+--- a/frontend/vite.config.js
++++ b/frontend/vite.config.js
+@@ -12,8 +12,10 @@ export default defineConfig({
+     port: 5173,
+     // En desarrollo, /api va al backend Django: mismo origen, sin problemas de cookies.
+     proxy: {
+-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
+-      '/admin': { target: 'http://localhost:8000', changeOrigin: true },
++      // 127.0.0.1 y no "localhost": en Windows, Node resuelve localhost a IPv6 (::1)
++      // y runserver escucha en IPv4, lo que da 502 Bad Gateway.
++      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: true },
++      '/admin': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+     },
+   },
+   test: {

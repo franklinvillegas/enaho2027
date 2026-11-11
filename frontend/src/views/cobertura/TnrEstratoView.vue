@@ -96,20 +96,32 @@ const paramsAnual = () => ({ ...aplicados.value, ...nav.value.anual })
 const paramsMensual = () => ({ ...aplicados.value, ...nav.value.mensual })
 const paramsHogar = () => ({ ...filtrosHogar })
 
+// El gráfico usa los mismos datos que la tabla anual en el nivel nacional: si la tabla
+// está en ese nivel se reutilizan, sin volver a llamar al procedimiento.
 const cargarGrafico = () => cargar(async () => {
   datosGrafico.value = (await api.tabla('anual', { ...aplicados.value, tipo: 0, estrato: 0, odei: '00' })).data.filas
 })
-const cargarAnual = () => cargar(async () => { datosAnual.value = (await api.tabla('anual', paramsAnual())).data.filas })
+const cargarAnual = () => cargar(async () => {
+  datosAnual.value = (await api.tabla('anual', paramsAnual())).data.filas
+  if (nivelAnual.value === 1) datosGrafico.value = datosAnual.value
+})
 const cargarMensual = () => cargar(async () => { datosMensual.value = (await api.tabla('mensual', paramsMensual())).data.filas })
 const cargarHogar = () => cargar(async () => {
   datosHogar.value = (await api.tabla('hogar', paramsHogar())).data.filas
   hogarCargado.value = true
 })
 
+// Las consultas van una tras otra, nunca dos a la vez sobre el mismo procedimiento
+// (dos ejecuciones simultáneas de ENAHO2017_TNR_ESTRATO_V3 hacían fallar una).
+async function cargarAnualYGrafico() {
+  await cargarAnual()
+  if (nivelAnual.value !== 1) await cargarGrafico()
+}
 function buscar() {
   aplicados.value = { ...filtros }
+  mensualCargado.value = false // con filtros nuevos, la pestaña por mes se vuelve a consultar
   if (pestana.value === 'mensual') cargarMensual()
-  else { cargarAnual(); cargarGrafico() }
+  else cargarAnualYGrafico()
 }
 
 // ---- Tabla anual (RESUMEN ESTRATO) -----------------------------------------------------
@@ -261,9 +273,17 @@ const observador = new ResizeObserver(() => ajustarAltoTabla())
 watch([pestana, datosAnual, datosMensual, datosHogar, error], reajustar)
 
 // ---- Ciclo de vida -----------------------------------------------------------------------
-watch(() => nav.value.anual, cargarAnual, { deep: true })
-watch(() => nav.value.mensual, cargarMensual, { deep: true })
-watch(pestana, (p) => p === 'hogar' && !hogarCargado.value && cargarHogar())
+// Solo cuando cambia la navegación de cada tabla (cambiar de pestaña no vuelve a consultar)
+watch(() => JSON.stringify(nav.value.anual), cargarAnual)
+watch(() => JSON.stringify(nav.value.mensual), cargarMensual)
+// Las pestañas "por mes" y "tabular" se consultan recién al abrirlas (la pantalla actual
+// consultaba todo al entrar, y había que esperar las consultas que no se iban a ver)
+const mensualCargado = ref(false)
+watch(datosMensual, () => (mensualCargado.value = true))
+watch(pestana, (p) => {
+  if (p === 'mensual' && !mensualCargado.value) cargarMensual()
+  if (p === 'hogar' && !hogarCargado.value) cargarHogar()
+})
 const salir = () => registrarUso(PANTALLA, 'salida')
 onMounted(async () => {
   registrarUso(PANTALLA, 'ingreso')
@@ -272,10 +292,9 @@ onMounted(async () => {
   observador.observe(document.body)
   filtrosHogar.odei = odeiUsuario.value
   await cargar(async () => { info.value = (await api.info()).data })
-  cargarGrafico()
-  cargarAnual()
-  cargarMensual()
-  if (pestana.value === 'hogar') cargarHogar()
+  await cargarAnualYGrafico()
+  if (pestana.value === 'mensual') await cargarMensual()
+  if (pestana.value === 'hogar') await cargarHogar()
   reajustar()
 })
 onBeforeUnmount(() => {
@@ -411,7 +430,7 @@ onBeforeUnmount(() => {
             </td>
             <td v-for="(c, k) in valoresMes(f)" :key="k" class="centro">{{ formatear(c.v, c.tasa) }}</td>
           </tr>
-          <tr v-if="!cargando && !datosMensual.length"><td colspan="54" class="sin-datos">Sin resultados para los filtros elegidos.</td></tr>
+          <tr v-if="mensualCargado && !cargando && !datosMensual.length"><td colspan="54" class="sin-datos">Sin resultados para los filtros elegidos.</td></tr>
         </tbody>
       </table>
     </div>

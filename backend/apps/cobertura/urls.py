@@ -27,8 +27,17 @@ rutas_tnr = [
     )
 ]
 
+# TNR según estrato: pantalla con cuatro pestañas (ver tnr_estrato.py)
+rutas_estrato = [
+    path("tnr-estrato/", views.TnrEstratoInfoView.as_view(), name="tnr-estrato"),
+    path("tnr-estrato/anual/", views.TnrEstratoAnualView.as_view(), name="tnr-estrato-anual"),
+    path("tnr-estrato/mensual/", views.TnrEstratoMensualView.as_view(), name="tnr-estrato-mensual"),
+    path("tnr-estrato/hogar/", views.TnrEstratoHogarView.as_view(), name="tnr-estrato-hogar"),
+]
+
 urlpatterns = [
     *rutas_tnr,
+    *rutas_estrato,
     path("indicadores/", views.IndicadoresView.as_view(), name="cobertura-indicadores"),
     path("indicadores/<slug:codigo>/", views.IndicadorView.as_view(), name="cobertura-indicador"),
     path(

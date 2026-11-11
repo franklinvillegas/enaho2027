@@ -77,11 +77,15 @@ export function formatear(valor, esTasa) {
   return esTasa ? n.toFixed(1) : String(Math.round(n))
 }
 
-/** N° de la fila: los procedimientos devuelven idMostrar en el primer nivel e id en los demás. */
-export const idFila = (fila) => fila.idMostrar ?? fila.id
+/**
+ * N° de la fila, tal como lo envía el procedimiento (igual que la pantalla actual):
+ * en el primer nivel (nacional) es idMostrar; al bajar a sede, encuestador o
+ * conglomerado es id (idMostrar ahí trae el código de la ODEI, no el número de fila).
+ */
+export const idFila = (fila, nivel = 1) => (nivel > 1 ? (fila.id ?? fila.idMostrar) : (fila.idMostrar ?? fila.id))
 
-/** Fila resaltada en amarillo: la primera (total) y los títulos de sección (N° = 0). */
-export const esFilaTotal = (fila, i) => i === 0 || String(idFila(fila)) === '0'
+/** Fila resaltada en amarillo: la primera (total) y, en el nivel nacional, los títulos de sección. */
+export const esFilaTotal = (fila, i, nivel = 1) => i === 0 || (nivel === 1 && Number(idFila(fila)) === 0)
 
 /**
  * Valores mensuales de un año para el gráfico de líneas. En el año en curso se cortan

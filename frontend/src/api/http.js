@@ -25,8 +25,9 @@ export function mensajeError(error) {
   const datos = error?.response?.data
   if (!datos) return 'No se pudo conectar con el servidor.'
   if (typeof datos.detail === 'string') return datos.detail
+  // Mensajes generales (non_field_errors) se muestran sin el nombre del campo
   return Object.entries(datos)
-    .map(([campo, msj]) => `${campo}: ${[].concat(msj).join(' ')}`)
+    .map(([campo, msj]) => (campo === 'non_field_errors' ? '' : `${campo}: `) + [].concat(msj).join(' '))
     .join(' · ')
 }
 

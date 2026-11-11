@@ -89,3 +89,17 @@ def test_excel_detalle_de_conglomerado(cliente, monkeypatch):
         "N°", "MES", "CONGLOMERADO", "VIVIENDA", "HOGAR", "TNR Parcial (VALORES PORCENTUALES)",
     ]  # fmt: skip
     assert [hoja.cell(6, c).value for c in range(1, 7)] == [1, "03", "123456", "001", "11", 100]
+
+
+@pytest.mark.django_db
+def test_excel_numero_de_fila_como_lo_envia_el_procedimiento(cliente, monkeypatch):
+    filas = [
+        {"id": 0, "idMostrar": "00", "nombreMostrar": "NACIONAL", "encuestador": "TOTAL",
+         "tnrp_2026": 1},
+        {"id": 1, "idMostrar": "14", "usuario": "167", "encuestador": "PATRICIA", "tnrp_2026": 2},
+        {"id": 2, "idMostrar": "14", "usuario": "168", "encuestador": "JUAN", "tnrp_2026": 3},
+    ]  # fmt: skip
+    monkeypatch.setattr(sistema_actual, "ejecutar_procedimiento", lambda *a, **k: filas)
+    r = cliente.get(BASE + "odei/", {"formato": "xlsx", "sede": "14"})
+    hoja = load_workbook(BytesIO(r.content)).active
+    assert [hoja.cell(f, 1).value for f in (5, 6, 7)] == [None, 1, 2]

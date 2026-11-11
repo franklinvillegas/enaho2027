@@ -9,7 +9,7 @@ from apps.comun.exportar import respuesta_excel
 from apps.comun.filtros import FiltrosIndicadorSerializer
 from apps.comun.permisos import AccesoModulo
 
-from . import servicios, tnr_parcial, tnr_total  # noqa: F401 (registran sus pantallas)
+from . import excel_estrato, servicios, tnr_estrato, tnr_parcial, tnr_total  # noqa: F401
 from . import tasas_no_respuesta as tnr
 from .excel_tnr import respuesta_tnr
 from .indicadores import INDICADORES
@@ -119,3 +119,74 @@ class TnrMapaView(BaseCobertura):
     @extend_schema(operation_id="cobertura_tnr_mapa", responses={200: dict})
     def get(self, request, indicador):
         return Response(tnr.consultar_mapa(tnr.obtener(indicador)))
+
+
+# --- TNR según estrato ---------------------------------------------------------------
+
+
+def _detalle(request) -> str:
+    """Texto del pie del Excel (filtros elegidos), limpio y acotado."""
+    return re.sub(r"[^\w .,:()\-]", "", request.query_params.get("detalle", ""))[:250].strip()
+
+
+class TnrEstratoInfoView(BaseCobertura):
+    @extend_schema(operation_id="cobertura_tnr_estrato_info", responses={200: dict})
+    def get(self, request):
+        return Response(tnr_estrato.info())
+
+
+class TnrEstratoAnualView(BaseCobertura):
+    """Pestaña RESUMEN ESTRATO: nacional > estrato > ODEI > conglomerados."""
+
+    @extend_schema(
+        operation_id="cobertura_tnr_estrato_anual",
+        parameters=[tnr_estrato.FiltrosAnualSerializer],
+        responses={200: dict},
+    )
+    def get(self, request):
+        datos = tnr_estrato.FiltrosAnualSerializer(data=request.query_params)
+        datos.is_valid(raise_exception=True)
+        f = dict(datos.validated_data)
+        tnr_estrato.verificar_alcance(f["odei"], request.user)
+        filas = tnr_estrato.consultar_anual(f)
+        if request.query_params.get("formato") == "xlsx":
+            return excel_estrato.excel_anual(f, filas, _detalle(request))
+        return Response({"filas": filas})
+
+
+class TnrEstratoMensualView(BaseCobertura):
+    """Pestaña RESUMEN POR MES: nacional > estrato > ODEI > conglomerado > viviendas."""
+
+    @extend_schema(
+        operation_id="cobertura_tnr_estrato_mensual",
+        parameters=[tnr_estrato.FiltrosMensualSerializer],
+        responses={200: dict},
+    )
+    def get(self, request):
+        datos = tnr_estrato.FiltrosMensualSerializer(data=request.query_params)
+        datos.is_valid(raise_exception=True)
+        f = dict(datos.validated_data)
+        tnr_estrato.verificar_alcance(f["odei"], request.user)
+        filas = tnr_estrato.consultar_mensual(f)
+        if request.query_params.get("formato") == "xlsx":
+            return excel_estrato.excel_mensual(f, filas, _detalle(request))
+        return Response({"filas": filas})
+
+
+class TnrEstratoHogarView(BaseCobertura):
+    """Pestaña RESUMEN TABULAR: hogares de una ODEI y mes."""
+
+    @extend_schema(
+        operation_id="cobertura_tnr_estrato_hogar",
+        parameters=[tnr_estrato.FiltrosHogarSerializer],
+        responses={200: dict},
+    )
+    def get(self, request):
+        datos = tnr_estrato.FiltrosHogarSerializer(data=request.query_params)
+        datos.is_valid(raise_exception=True)
+        f = dict(datos.validated_data)
+        tnr_estrato.verificar_alcance(f["odei"], request.user)
+        filas = tnr_estrato.consultar_hogar(f)
+        if request.query_params.get("formato") == "xlsx":
+            return excel_estrato.excel_hogar(filas, _detalle(request))
+        return Response({"filas": filas})

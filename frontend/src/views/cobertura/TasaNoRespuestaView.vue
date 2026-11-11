@@ -137,7 +137,7 @@ function odeiPermitida(codigo) {
   return propia === 0 || propia === Number.parseInt(codigo, 10)
 }
 function esEnlace(fila, i) {
-  if (esFilaTotal(fila, i)) return false
+  if (esFilaTotal(fila, i, nivel.value)) return false
   if (nivel.value === 1) {
     return vista.value !== 'departamentos' && !String(fila.idMostrar).includes('.')
       && odeiPermitida(fila.idMostrar)
@@ -414,8 +414,8 @@ onBeforeUnmount(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="{ f, i } in filasVisibles" :key="i" :class="esFilaTotal(f, i) ? 'total' : (i % 2 ? 'par' : 'impar')">
-              <td class="fijo c1 centro">{{ esFilaTotal(f, i) ? '' : idFila(f) }}</td>
+            <tr v-for="{ f, i } in filasVisibles" :key="i" :class="esFilaTotal(f, i, nivel) ? 'total' : (i % 2 ? 'par' : 'impar')">
+              <td class="fijo c1 centro">{{ esFilaTotal(f, i, nivel) ? '' : idFila(f, nivel) }}</td>
               <td v-for="c in columnasExtraIzq" :key="c.clave" class="centro">{{ f[c.clave] }}</td>
               <td class="fijo c2">
                 <a v-if="esEnlace(f, i)" class="enlace" @click="profundizar(f)">{{ f[columnaNombre.clave] ?? f.nombreMostrar }}</a>
@@ -426,7 +426,7 @@ onBeforeUnmount(() => {
                 <!-- En el detalle de un encuestador se resalta en rojo el mes del conglomerado -->
                 <td v-for="c in grupo.columnas" :key="c.clave"
                   :class="['centro', { 'mes-trabajo': nivel === 3 && c.mes && f.mes === c.mes }]">
-                  <template v-if="String(idFila(f)) === '0' && i !== 0">-</template>
+                  <template v-if="nivel === 1 && Number(idFila(f)) === 0 && i !== 0">-</template>
                   <span v-else-if="c.colorear" class="casilla"
                     :style="{ background: colorCasilla(f[c.clave]).fondo, color: colorCasilla(f[c.clave]).texto }">
                     {{ formatear(f[c.clave], c.tasa) }}

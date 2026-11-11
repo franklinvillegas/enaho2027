@@ -126,9 +126,19 @@ def _numero(valor):
     return int(n) if n.is_integer() else round(n, 1)
 
 
-def _id(fila: dict):
-    """N° de la fila: idMostrar en el primer nivel, id en los siguientes."""
+def _id(fila: dict, nivel: int = 1):
+    """N° de la fila tal como lo envía el procedimiento: idMostrar en el nivel nacional,
+    id al bajar a sede, encuestador o conglomerado (como la pantalla actual)."""
+    if nivel > 1:
+        return fila.get("id", fila.get("idMostrar"))
     return fila.get("idMostrar", fila.get("id"))
+
+
+def _es_cero(valor) -> bool:
+    try:
+        return float(valor) == 0
+    except TypeError, ValueError:
+        return False
 
 
 def libro_tnr(
@@ -194,14 +204,14 @@ def libro_tnr(
     # Datos
     f = ultima_enc + 1
     for i, fila in enumerate(filas):
-        es_total = i == 0 or str(_id(fila)) == "0"
-        seccion = i != 0 and str(_id(fila)) == "0"
+        seccion = nivel == 1 and i != 0 and _es_cero(_id(fila))
+        es_total = i == 0 or seccion
         relleno = AMARILLO if es_total else (GRIS if i % 2 else BLANCO)
         nombre = fila.get(clave_nombre)
         if nombre in (None, ""):
             nombre = fila.get("nombreMostrar")
         valores = [
-            "" if es_total else _numero(_id(fila)),
+            "" if es_total else _numero(_id(fila, nivel)),
             *[_texto(fila.get(c)) for c, _ in izq],
             _texto(nombre),
             *[_texto(fila.get(c)) for c, _ in tras],

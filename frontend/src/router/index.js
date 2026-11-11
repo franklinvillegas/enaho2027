@@ -14,6 +14,8 @@ const TasaNoRespuesta = () => import('@/views/cobertura/TasaNoRespuestaView.vue'
 const VISTAS_PROPIAS = {
   'cobertura/tnr-total': { component: TasaNoRespuesta, props: { indicador: 'tnr-total' } },
   'cobertura/tnr-parcial': { component: TasaNoRespuesta, props: { indicador: 'tnr-parcial' } },
+  // TNR según estrato tiene otra estructura (cuatro pestañas): vista propia
+  'cobertura/tnr-estrato': { component: () => import('@/views/cobertura/TnrEstratoView.vue') },
 }
 const EnConstruccion = () => import('@/views/EnConstruccionView.vue')
 

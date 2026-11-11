@@ -77,6 +77,7 @@ Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
 | GET | `/api/v1/cobertura/{tnr}/` | Pantalla de tasa de no respuesta (`tnr-total`, `tnr-parcial`): vistas, textos, gráficos |
 | GET | `/api/v1/cobertura/{tnr}/{vista}/` | Filas de una vista (`departamentos`, `odei`, `odei-mes`); `sede`, `usuario`, `conglomerado` para bajar de nivel; `&formato=xlsx` |
 | GET | `/api/v1/cobertura/{tnr}/mapa/` | Mapa de calor por departamento |
+| GET | `/api/v1/cobertura/tnr-estrato/{anual,mensual,hogar}/` | TNR según estrato (`tipo`, `estrato`, `odei`, `conglomerado`, rango de meses y periodos, `excluir`; hogar: `odei`, `mes`); `&formato=xlsx` |
 
 Documentación completa: `/api/docs/`.
 
@@ -110,6 +111,10 @@ iguales cada una. Aquí comparten todo:
 - Frontend: `views/cobertura/TasaNoRespuestaView.vue` recibe el código de la pantalla y
   toma de `/cobertura/{tnr}/` lo que cambia. Las columnas de años y meses salen de los
   datos (`composables/tablaTnr.js`): no hay que tocar código al cambiar de año.
+
+La TNR según estrato tiene otra estructura (cuatro pestañas: gráfico por estrato,
+anual, por mes y hogares), por eso tiene su propio módulo (`tnr_estrato.py`,
+`excel_estrato.py`) y vista (`TnrEstratoView.vue`, `composables/tablaEstrato.js`).
 
 Para agregar otra pantalla con el mismo esquema (p. ej. TNR por estrato): crear su
 configuración en el backend, sumarla a `VISTAS_PROPIAS` en `router/index.js` y marcarla

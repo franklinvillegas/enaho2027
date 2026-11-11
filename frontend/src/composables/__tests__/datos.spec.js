@@ -50,7 +50,7 @@ describe('menú', () => {
   })
 })
 
-import { colorCasilla, idFila, modeloColumnas, serieMensual } from '../tablaTnr'
+import { colorCasilla, esFilaTotal, idFila, modeloColumnas, serieMensual } from '../tablaTnr'
 
 describe('tabla TNR', () => {
   it('arma columnas por año desde los datos', () => {
@@ -88,5 +88,35 @@ describe('tabla TNR', () => {
     const fila = { enero_2026: 1, febrero_2026: 2, marzo_2026: 0, enero_2025: 4 }
     expect(serieMensual(fila, 2026, new Date(2026, 1, 15))).toEqual([1, 2])
     expect(serieMensual(fila, 2025, new Date(2026, 1, 15))).toHaveLength(12)
+  })
+})
+
+describe('N° de fila como lo envía el procedimiento', () => {
+  it('nacional usa idMostrar; desde la sede usa id', () => {
+    const fila = { id: 2, idMostrar: '14' }
+    expect(idFila(fila, 1)).toBe('14')
+    expect(idFila(fila, 3)).toBe(2)
+  })
+  it('el total "00" del nivel nacional se resalta', () => {
+    expect(esFilaTotal({ idMostrar: '00' }, 5, 1)).toBe(true)
+    expect(esFilaTotal({ id: 3, idMostrar: '14' }, 3, 2)).toBe(false)
+  })
+})
+
+import { areaDeOrden, seriesArea, valoresAnio } from '../tablaEstrato'
+
+describe('TNR según estrato', () => {
+  it('TOTAL_ABS suma panel y no panel', () => {
+    const v = valoresAnio({ TNR2026: 9, TNR2026P: 8, TNR2026P_ABS: 10, TNR2026NP: 11, TNR2026NP_ABS: 5 }, 2026)
+    expect(v.map((c) => c.v)).toEqual([9, 15, 8, 10, 11, 5])
+  })
+  it('área según ORDEN: 1-5 urbano, 7-11 Lima, 13-17 resto', () => {
+    expect([1, 5, 7, 11, 13, 17].map(areaDeOrden)).toEqual([1, 1, 2, 2, 3, 3])
+  })
+  it('gráfico: una serie por año con los 5 estratos del área', () => {
+    const filas = [0, 1, 2, 3, 4, 5].map((o) => ({ ORDEN: o, TNR2025: o, TNR2026: o * 2 }))
+    const s = seriesArea(filas, 1)
+    expect(s.map((x) => x.name)).toEqual(['2025', '2026'])
+    expect(s[1].data).toEqual([2, 4, 6, 8, 10])
   })
 })

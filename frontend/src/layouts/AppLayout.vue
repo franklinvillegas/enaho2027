@@ -84,7 +84,8 @@ async function salir() {
 
   <v-main class="bg-white">
     <v-container fluid class="pa-4">
-      <router-view />
+      <!-- key: al pasar de una pantalla a otra con la misma vista (TNR total → parcial) se vuelve a montar -->
+      <router-view :key="route.path" />
     </v-container>
   </v-main>
 </template>

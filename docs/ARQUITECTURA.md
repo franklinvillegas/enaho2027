@@ -74,6 +74,9 @@ Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
 | GET | `/api/v1/cobertura/indicadores/` | Indicadores de cobertura disponibles |
 | GET | `/api/v1/cobertura/indicadores/{codigo}/` | Datos (`?nivel=&odei=&periodo_inicio=...`, `&formato=xlsx`) |
 | GET | `/api/v1/cobertura/indicadores/{codigo}/mapa/` | Datos para el mapa |
+| GET | `/api/v1/cobertura/{tnr}/` | Pantalla de tasa de no respuesta (`tnr-total`, `tnr-parcial`): vistas, textos, gráficos |
+| GET | `/api/v1/cobertura/{tnr}/{vista}/` | Filas de una vista (`departamentos`, `odei`, `odei-mes`); `sede`, `usuario`, `conglomerado` para bajar de nivel; `&formato=xlsx` |
+| GET | `/api/v1/cobertura/{tnr}/mapa/` | Mapa de calor por departamento |
 
 Documentación completa: `/api/docs/`.
 
@@ -93,6 +96,24 @@ frontend/src/
 
 Una sola vista (`views/cobertura/IndicadorCoberturaView.vue`) sirve para todos los
 indicadores de cobertura; solo cambia el código del indicador.
+
+### Pantallas de tasa de no respuesta (diseño igual al sistema actual)
+
+TNR total y TNR parcial repiten en el sistema actual ~2.500 líneas de JavaScript casi
+iguales cada una. Aquí comparten todo:
+
+- Backend: `apps/cobertura/tasas_no_respuesta.py` (motor: filtros, alcance por ODEI,
+  consulta, modo demo) y una configuración por pantalla (`tnr_total.py`, `tnr_parcial.py`)
+  con sus procedimientos, orden de parámetros, prefijo de columnas (`tnr2026` /
+  `tnrp_2026`), textos, colores y filtros extra. El Excel con el diseño del reporte
+  actual está en `excel_tnr.py`.
+- Frontend: `views/cobertura/TasaNoRespuestaView.vue` recibe el código de la pantalla y
+  toma de `/cobertura/{tnr}/` lo que cambia. Las columnas de años y meses salen de los
+  datos (`composables/tablaTnr.js`): no hay que tocar código al cambiar de año.
+
+Para agregar otra pantalla con el mismo esquema (p. ej. TNR por estrato): crear su
+configuración en el backend, sumarla a `VISTAS_PROPIAS` en `router/index.js` y marcarla
+`migrada: true` en el menú.
 
 ## Cómo migrar una pantalla nueva
 

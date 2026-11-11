@@ -7,10 +7,14 @@ import LoginView from '@/views/LoginView.vue'
 import InicioView from '@/views/InicioView.vue'
 
 const IndicadorCobertura = () => import('@/views/cobertura/IndicadorCoberturaView.vue')
-const TnrTotal = () => import('@/views/cobertura/TnrTotalView.vue')
+const TasaNoRespuesta = () => import('@/views/cobertura/TasaNoRespuestaView.vue')
 
-// Pantallas con vista propia (replican el diseño de la pantalla actual)
-const VISTAS_PROPIAS = { 'cobertura/tnr-total': TnrTotal }
+// Pantallas con vista propia (replican el diseño de la pantalla actual).
+// Las tasas de no respuesta comparten una vista: cambia solo el indicador.
+const VISTAS_PROPIAS = {
+  'cobertura/tnr-total': { component: TasaNoRespuesta, props: { indicador: 'tnr-total' } },
+  'cobertura/tnr-parcial': { component: TasaNoRespuesta, props: { indicador: 'tnr-parcial' } },
+}
 const EnConstruccion = () => import('@/views/EnConstruccionView.vue')
 
 // Una ruta por pantalla del menú. Las pantallas migradas apuntan a su vista real.
@@ -19,9 +23,13 @@ const rutasPantallas = MENU.flatMap((m) =>
     path: `${rutaModulo(m.modulo)}/${p.slug}`,
     name: `${m.modulo}-${p.slug}`,
     component:
-      VISTAS_PROPIAS[`${m.modulo}/${p.slug}`] ??
+      VISTAS_PROPIAS[`${m.modulo}/${p.slug}`]?.component ??
       (m.modulo === 'cobertura' && p.indicador ? IndicadorCobertura : EnConstruccion),
-    props: p.indicador ? { indicador: p.indicador, titulo: p.titulo } : { titulo: p.titulo },
+    props: {
+      titulo: p.titulo,
+      ...(p.indicador ? { indicador: p.indicador } : {}),
+      ...VISTAS_PROPIAS[`${m.modulo}/${p.slug}`]?.props,
+    },
     meta: { modulo: m.modulo, titulo: p.titulo, pantalla: `${m.modulo}/${p.slug}` },
   })),
 )

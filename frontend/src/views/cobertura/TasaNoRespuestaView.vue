@@ -1,6 +1,8 @@
 <script setup>
-// Tasa de no respuesta total: mismo diseño que la pantalla actual
-// (templates/.../tasaNoRespuesta/tnr_total.html), con estas mejoras:
+// Pantallas de tasa de no respuesta (total, parcial): mismo diseño que las pantallas
+// actuales (templates/.../tasaNoRespuesta/tnr_total.html y tnr_parcial.html). Una sola
+// vista para todas: lo que cambia (procedimientos, columnas, textos, colores, filtros)
+// lo envía el backend en /cobertura/<indicador>/. Mejoras frente a la pantalla actual:
 //  - años y meses salen de los datos (no están escritos a mano)
 //  - Excel real (.xlsx) generado en el servidor
 //  - errores en pantalla, no con alert()
@@ -14,19 +16,31 @@ import { BarChart, LineChart, MapChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TitleComponent, TooltipComponent, ToolboxComponent,
   VisualMapComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
-import api from '@/api/tnrTotal'
+import apiTnr from '@/api/tasaNoRespuesta'
 import { mensajeError } from '@/api/http'
 import { registrarUso } from '@/api/comun'
-import { MESES_CORTOS, aniosConMeses, aniosDe, colorCasilla, esFilaTotal, formatear,
-  modeloColumnas, MESES } from '@/composables/tablaTnr'
+import { useAuthStore } from '@/stores/auth'
+import { MESES_CORTOS, aniosConMeses, aniosDe, colorCasilla, esFilaTotal, formatear, idFila,
+  modeloColumnas, serieMensual, MESES } from '@/composables/tablaTnr'
 
 use([BarChart, LineChart, MapChart, GridComponent, LegendComponent, TitleComponent,
   TooltipComponent, ToolboxComponent, VisualMapComponent, CanvasRenderer])
 
+const props = defineProps({
+  indicador: { type: String, required: true }, // tnr-total, tnr-parcial
+  titulo: { type: String, default: '' },
+})
+
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+const api = apiTnr(props.indicador)
+const pantalla = `cobertura/${props.indicador}`
 
-const info = ref({ titulo: 'Tasa de no respuesta total', descripcion: '', formula: '', vistas: [] })
+const info = ref({ titulo: props.titulo, descripcion: '', formula: '', vistas: [], prefijo: 'tnr',
+  filtros_extra: [], colorear_ultimo: false, titulo_detalle: 'AÑOS', grafico: {} })
+const g = computed(() => info.value.grafico)
+const tieneFiltro = (nombre) => info.value.filtros_extra.includes(nombre)
 const datos = ref({ columnas: [], filas: [] })
 const cargando = ref(false)
 const exportando = ref(false)
@@ -86,22 +100,28 @@ const migas = computed(() => {
 })
 
 // Columnas
-const modelo = computed(() => modeloColumnas(datos.value.columnas))
+const modelo = computed(() => modeloColumnas(datos.value.columnas,
+  { prefijo: info.value.prefijo, colorearUltimo: info.value.colorear_ultimo }))
+const tituloAnios = computed(() => (nivel.value === 4 ? info.value.titulo_detalle : 'AÑOS'))
 const columnaNombre = computed(() => {
   if (nivel.value === 1) return vista.value === 'departamentos'
     ? { clave: 'nombreMostrar', titulo: 'Dominios de estudio' } : { clave: 'nombreMostrar', titulo: 'ODEI' }
   if (nivel.value === 2) return { clave: 'encuestador', titulo: 'ENCUESTADOR' }
   return { clave: 'conglomerado', titulo: 'CONGLOMERADO' }
 })
+// Columnas que trae alguna fila (la fila del total a veces no trae mes, vivienda, hogar)
+const presentes = computed(() => new Set(datos.value.filas.flatMap((f) => Object.keys(f))))
+const soloPresentes = (cols) => cols.filter((c) => presentes.value.has(c.clave))
+// Detalle de un conglomerado (nivel 4), como la pantalla actual:
+// N° | MES | CONGLOMERADO | VIVIENDA | HOGAR | valores
 const columnasExtraIzq = computed(() => (nivel.value === 4
-  ? [{ clave: 'mes', titulo: 'MES' }, { clave: 'vivienda', titulo: 'VIVIENDA' }, { clave: 'hogar', titulo: 'HOGAR' }]
-    .filter((c) => datos.value.columnas.includes(c.clave))
-  : []))
+  ? soloPresentes([{ clave: 'mes', titulo: 'MES' }]) : []))
+const columnasTrasNombre = computed(() => (nivel.value === 4
+  ? soloPresentes([{ clave: 'vivienda', titulo: 'VIVIENDA' }, { clave: 'hogar', titulo: 'HOGAR' }]) : []))
 const columnasExtraDer = computed(() => (nivel.value === 3
-  ? [{ clave: 'tipEnc', titulo: 'TIPO DE ENCUESTA' }, { clave: 'viv', titulo: 'VIVIENDAS TRABAJADAS' }]
-    .filter((c) => datos.value.columnas.includes(c.clave))
+  ? soloPresentes([{ clave: 'tipEnc', titulo: 'TIPO DE ENCUESTA' }, { clave: 'viv', titulo: 'VIVIENDAS TRABAJADAS' }])
   : []))
-const totalColumnasDatos = computed(() => modelo.value.grupos.reduce((n, g) => n + g.columnas.length, 0))
+const totalColumnasDatos = computed(() => modelo.value.grupos.reduce((n, gr) => n + gr.columnas.length, 0))
 const filasHeader = computed(() => (modelo.value.tipo === 'meses' ? 3 : 2))
 
 const filasVisibles = computed(() => {
@@ -111,9 +131,17 @@ const filasVisibles = computed(() => {
   return filas.filter(({ f, i }) => i === 0 || Object.values(f).some((v) => String(v ?? '').toLowerCase().includes(t)))
 })
 
+// Igual que validarOdei() de la pantalla actual: un usuario de ODEI solo entra a la suya.
+function odeiPermitida(codigo) {
+  const propia = Number(auth.usuario?.odei ?? 0)
+  return propia === 0 || propia === Number.parseInt(codigo, 10)
+}
 function esEnlace(fila, i) {
   if (esFilaTotal(fila, i)) return false
-  if (nivel.value === 1) return vista.value !== 'departamentos' && !String(fila.idMostrar).includes('.')
+  if (nivel.value === 1) {
+    return vista.value !== 'departamentos' && !String(fila.idMostrar).includes('.')
+      && odeiPermitida(fila.idMostrar)
+  }
   if (nivel.value === 2) return !!fila.usuario
   if (nivel.value === 3) return vista.value === 'odei-mes' && !!fila.conglomerado
   return false
@@ -145,7 +173,8 @@ async function exportar() {
     const titulo = nivel.value === 1 ? 'NACIONAL' : ambito.value
     const { data } = await api.excel(vista.value, parametros(), titulo)
     const url = URL.createObjectURL(data)
-    const nombre = `TNR-TOTAL-${ambito.value.replace(/[^A-Z0-9]+/gi, '-')}.xlsx`
+    const prefijoArchivo = (g.value.serie_barras || props.indicador).replace(/_/g, '-').toUpperCase()
+    const nombre = `${prefijoArchivo}-${ambito.value.replace(/[^A-Z0-9]+/gi, '-')}.xlsx`
     Object.assign(document.createElement('a'), { href: url, download: nombre }).click()
     URL.revokeObjectURL(url)
   } catch (e) {
@@ -163,34 +192,36 @@ const opcionesGrafico = computed(() => {
   if (conMeses.length) {
     const colores = ['#4A9BE0', '#000000', '#E57373', '#81C784']
     return {
-      title: { text: `Tasa de No Respuesta Total - ${nombreGrafico.value}`, left: 'center', textStyle: { fontSize: 18 } },
+      title: { text: `${g.value.titulo_lineas} - ${nombreGrafico.value}`, left: 'center', textStyle: { fontSize: 18 } },
       tooltip: { trigger: 'axis' },
       toolbox: { right: 10, feature: { saveAsImage: { title: 'Descargar' } } },
       legend: { bottom: 0 },
       grid: { left: 60, right: 30, top: 60, bottom: 60 },
       xAxis: { type: 'category', data: MESES_CORTOS },
-      yAxis: { type: 'value', name: '% Tasa de no Respuesta', nameLocation: 'middle', nameGap: 40 },
+      yAxis: { type: 'value', name: g.value.eje_lineas, nameLocation: 'middle', nameGap: 40 },
       series: conMeses.map((a, k) => ({
         name: String(a), type: 'line', color: colores[k % colores.length], symbolSize: 7,
         label: { show: true, position: 'top', fontWeight: 'bold', fontSize: 11, color: '#000' },
-        data: MESES.map((m) => (fila[`${m}_${a}`] ?? null)),
+        data: serieMensual(fila, a),
       })),
     }
   }
-  const anios = aniosDe(datos.value.columnas)
+  const anios = aniosDe(datos.value.columnas, info.value.prefijo)
   return {
-    title: { text: `% Tasa de No Respuesta Total - ${nombreGrafico.value}`, left: 'center', textStyle: { fontSize: 18 } },
-    tooltip: { trigger: 'axis', formatter: (p) => `${p[0].name}<br>TNR_Total: <b>${Number(p[0].value).toFixed(1)}</b>` },
+    title: { text: `${g.value.titulo_barras} - ${nombreGrafico.value}`, left: 'center', textStyle: { fontSize: 18 } },
+    tooltip: { trigger: 'axis', formatter: (p) => `${p[0].name}<br>${g.value.serie_barras}: <b>${Number(p[0].value).toFixed(1)}</b>` },
     toolbox: { right: 10, feature: { saveAsImage: { title: 'Descargar' } } },
     grid: { left: 60, right: 30, top: 60, bottom: 40 },
     xAxis: { type: 'category', data: anios.map(String) },
-    yAxis: { type: 'value', name: '% TNR Total', nameLocation: 'middle', nameGap: 40 },
+    yAxis: { type: 'value', name: g.value.eje_barras, nameLocation: 'middle', nameGap: 40 },
     series: [{
-      name: 'TNR_Total', type: 'bar', barWidth: '48%', color: '#DDB4B4',
+      name: g.value.serie_barras, type: 'bar', barWidth: '48%',
       emphasis: { itemStyle: { color: '#F7E1E1' } },
       label: { show: true, position: 'top', fontWeight: 'bold', fontSize: 11, color: '#000',
         formatter: (p) => `${Number(p.value).toFixed(1)}%` },
-      data: anios.map((a) => fila[`tnr${a}`]),
+      // la última barra (año en curso) puede ir en otro color, como en la TNR parcial
+      data: anios.map((a, k) => ({ value: fila[`${info.value.prefijo}${a}`],
+        itemStyle: { color: k === anios.length - 1 ? g.value.color_barra_ultima : g.value.color_barras } })),
     }],
   }
 })
@@ -231,7 +262,7 @@ watch(ocupado, (si) => {
 const opcionesMapa = computed(() => {
   const valores = datosMapa.value.map((d) => d.value)
   return {
-    tooltip: { formatter: (p) => `<b>${p.name}</b><br>% TNR total: <b>${p.value ?? '-'}</b>` },
+    tooltip: { formatter: (p) => `<b>${p.name}</b><br>${g.value.etiqueta_mapa}: <b>${p.value ?? '-'}</b>` },
     visualMap: { min: Math.min(...valores), max: Math.max(...valores), left: 20, bottom: 20,
       orient: 'horizontal', calculable: false, text: [String(Math.max(...valores)), String(Math.min(...valores))],
       inRange: { color: ['#EFE8DF', '#3A95F7'] } },
@@ -264,7 +295,7 @@ onMounted(() => observador.observe(document.body))
 
 // Ciclo de vida
 onMounted(async () => {
-  registrarUso('cobertura/tnr-total', 'ingreso')
+  registrarUso(pantalla, 'ingreso')
   try {
     info.value = (await api.info()).data
   } catch (e) {
@@ -273,7 +304,7 @@ onMounted(async () => {
 })
 watch([vista, sede, usuario, conglomerado], consultar, { immediate: true })
 watch(pestana, (p) => p === 'mapa' && !datosMapa.value.length && cargarMapa(), { immediate: true })
-const salir = () => registrarUso('cobertura/tnr-total', 'salida')
+const salir = () => registrarUso(pantalla, 'salida')
 window.addEventListener('beforeunload', salir)
 onMounted(reajustar)
 onBeforeUnmount(() => {
@@ -337,10 +368,10 @@ onBeforeUnmount(() => {
         <label>Periodo inicial:<select v-model.number="filtros.periodo_inicio"><option v-for="o in OPC_PERIODO" :key="o.value" :value="o.value">{{ o.title }}</option></select></label>
         <label>Mes final:<select v-model.number="filtros.mes_fin"><option v-for="o in OPC_MES" :key="o.value" :value="o.value">{{ o.title }}</option></select></label>
         <label>Periodo final:<select v-model.number="filtros.periodo_fin"><option v-for="o in OPC_PERIODO" :key="o.value" :value="o.value">{{ o.title }}</option></select></label>
-        <label v-if="vista === 'odei-mes'">Exclusiones:<select v-model.number="filtros.excluir"><option v-for="o in OPC_EXCLUIR" :key="o.value" :value="o.value">{{ o.title }}</option></select></label>
+        <label v-if="vista === 'odei-mes' && tieneFiltro('excluir')">Exclusiones:<select v-model.number="filtros.excluir"><option v-for="o in OPC_EXCLUIR" :key="o.value" :value="o.value">{{ o.title }}</option></select></label>
         <button class="btn-buscar" :disabled="cargando" @click="consultar">Buscar</button>
       </div>
-      <div v-if="vista === 'odei-mes' && nivel >= 2" class="filtros">
+      <div v-if="vista === 'odei-mes' && nivel >= 2 && tieneFiltro('solo_activos')" class="filtros">
         <label>Encuestadores:<select v-model="filtros.solo_activos"><option v-for="o in OPC_ACTIVOS" :key="o.title" :value="o.value">{{ o.title }}</option></select></label>
       </div>
 
@@ -369,29 +400,33 @@ onBeforeUnmount(() => {
               <th :rowspan="filasHeader" class="fijo c1">N°</th>
               <th v-for="c in columnasExtraIzq" :key="c.clave" :rowspan="filasHeader">{{ c.titulo }}</th>
               <th :rowspan="filasHeader" class="fijo c2">{{ columnaNombre.titulo }}</th>
-              <th :colspan="totalColumnasDatos">AÑOS</th>
+              <th v-for="c in columnasTrasNombre" :key="c.clave" :rowspan="filasHeader">{{ c.titulo }}</th>
+              <th :colspan="totalColumnasDatos">{{ tituloAnios }}</th>
               <th v-for="c in columnasExtraDer" :key="c.clave" :rowspan="filasHeader">{{ c.titulo }}</th>
             </tr>
             <tr v-if="modelo.tipo === 'meses'">
-              <th v-for="g in modelo.grupos" :key="g.anio" :colspan="g.columnas.length">{{ g.anio }}</th>
+              <th v-for="grupo in modelo.grupos" :key="grupo.anio" :colspan="grupo.columnas.length">{{ grupo.anio }}</th>
             </tr>
             <tr>
-              <template v-for="g in modelo.grupos" :key="g.anio ?? 'a'">
-                <th v-for="c in g.columnas" :key="c.clave">{{ c.titulo }}</th>
+              <template v-for="grupo in modelo.grupos" :key="grupo.anio ?? 'a'">
+                <th v-for="c in grupo.columnas" :key="c.clave">{{ c.titulo }}</th>
               </template>
             </tr>
           </thead>
           <tbody>
             <tr v-for="{ f, i } in filasVisibles" :key="i" :class="esFilaTotal(f, i) ? 'total' : (i % 2 ? 'par' : 'impar')">
-              <td class="fijo c1 centro">{{ esFilaTotal(f, i) ? '' : f.idMostrar }}</td>
+              <td class="fijo c1 centro">{{ esFilaTotal(f, i) ? '' : idFila(f) }}</td>
               <td v-for="c in columnasExtraIzq" :key="c.clave" class="centro">{{ f[c.clave] }}</td>
               <td class="fijo c2">
                 <a v-if="esEnlace(f, i)" class="enlace" @click="profundizar(f)">{{ f[columnaNombre.clave] ?? f.nombreMostrar }}</a>
                 <span v-else>{{ f[columnaNombre.clave] ?? f.nombreMostrar }}</span>
               </td>
-              <template v-for="g in modelo.grupos" :key="g.anio ?? 'a'">
-                <td v-for="c in g.columnas" :key="c.clave" class="centro">
-                  <template v-if="String(f.idMostrar) === '0' && i !== 0">-</template>
+              <td v-for="c in columnasTrasNombre" :key="c.clave" class="centro">{{ f[c.clave] }}</td>
+              <template v-for="grupo in modelo.grupos" :key="grupo.anio ?? 'a'">
+                <!-- En el detalle de un encuestador se resalta en rojo el mes del conglomerado -->
+                <td v-for="c in grupo.columnas" :key="c.clave"
+                  :class="['centro', { 'mes-trabajo': nivel === 3 && c.mes && f.mes === c.mes }]">
+                  <template v-if="String(idFila(f)) === '0' && i !== 0">-</template>
                   <span v-else-if="c.colorear" class="casilla"
                     :style="{ background: colorCasilla(f[c.clave]).fondo, color: colorCasilla(f[c.clave]).texto }">
                     {{ formatear(f[c.clave], c.tasa) }}
@@ -471,6 +506,7 @@ onBeforeUnmount(() => {
 th.fijo { z-index: 3; }
 .c1 { left: 0; min-width: 48px; }
 .c2 { left: 48px; min-width: 160px; }
+.mes-trabajo { color: #FF2400; font-weight: 700; }
 .casilla { display: inline-block; min-width: 70px; padding: 0 0.2em; }
 .sin-datos { padding: 24px; color: #777; }
 </style>

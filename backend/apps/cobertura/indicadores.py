@@ -55,16 +55,11 @@ class Indicador:
 INDICADORES: dict[str, Indicador] = {
     i.codigo: i
     for i in [
-        # TNR total tiene su propia pantalla con vistas: ver tnr_total.py.
+        # TNR total y parcial tienen su propia pantalla con vistas: ver tnr_total.py,
+        # tnr_parcial.py y tasas_no_respuesta.py.
         # Los siguientes indicadores tienen por ahora solo el nivel departamento.
         # Los niveles ODEI y conglomerado se agregan cuando se confirme el orden
         # de parámetros con el código de cada procedimiento.
-        Indicador(
-            codigo="tnr-parcial",
-            nombre="Tasa de no respuesta parcial",
-            niveles={Nivel.DEPARTAMENTO: Consulta("cobertura_tasaNoRespuestaParcial_dep", _rango)},
-            mapa=Consulta("enaho2015_tnr_parcial_map"),
-        ),
         Indicador(
             codigo="problemas-marco",
             nombre="Tasa de problemas de marco",

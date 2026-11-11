@@ -9,8 +9,9 @@ from apps.comun.exportar import respuesta_excel
 from apps.comun.filtros import FiltrosIndicadorSerializer
 from apps.comun.permisos import AccesoModulo
 
-from . import servicios, tnr_total
-from .excel_tnr import respuesta_tnr_total
+from . import servicios, tnr_parcial, tnr_total  # noqa: F401 (registran sus pantallas)
+from . import tasas_no_respuesta as tnr
+from .excel_tnr import respuesta_tnr
 from .indicadores import INDICADORES
 from .repositorios import obtener_repositorio
 
@@ -75,54 +76,46 @@ class MapaIndicadorView(BaseCobertura):
         return Response(servicios.consultar_mapa(codigo, obtener_repositorio()))
 
 
-class TnrTotalVistasView(BaseCobertura):
-    """Metadatos de la pantalla de TNR total: vistas, descripción y fórmula."""
+class TnrInfoView(BaseCobertura):
+    """Metadatos de una pantalla de tasa de no respuesta: vistas, textos y gráficos."""
 
-    @extend_schema(operation_id="cobertura_tnr_total_info", responses={200: dict})
-    def get(self, request):
-        return Response(
-            {
-                "titulo": tnr_total.TITULO,
-                "descripcion": tnr_total.DESCRIPCION,
-                "formula": tnr_total.FORMULA,
-                "vistas": [
-                    {"codigo": k, "nombre": v["nombre"]} for k, v in tnr_total.VISTAS.items()
-                ],
-            }
-        )
+    @extend_schema(operation_id="cobertura_tnr_info", responses={200: dict})
+    def get(self, request, indicador):
+        return Response(tnr.obtener(indicador).info())
 
 
-class TnrTotalView(BaseCobertura):
-    """Filas de una vista de TNR total, tal como las devuelve el procedimiento actual.
+class TnrVistaView(BaseCobertura):
+    """Filas de una vista, tal como las devuelve el procedimiento actual.
 
-    Ejemplo: /api/v1/cobertura/tnr-total/odei-mes/?sede=15&usuario=0&mes_inicio=1&mes_fin=6
-    Con &formato=xlsx devuelve el mismo resultado en Excel.
+    Ejemplo: /api/v1/cobertura/tnr-parcial/odei-mes/?sede=15&usuario=0&mes_inicio=1&mes_fin=6
+    Con &formato=xlsx devuelve el mismo resultado en Excel, con el diseño del reporte actual.
     """
 
     @extend_schema(
-        operation_id="cobertura_tnr_total_vista",
+        operation_id="cobertura_tnr_vista",
         parameters=[
-            tnr_total.FiltrosTnrTotalSerializer,
+            tnr.FiltrosTnrSerializer,
             OpenApiParameter("formato", str, enum=["json", "xlsx"], required=False),
             OpenApiParameter("ambito", str, required=False, description="Título del Excel"),
         ],
         responses={200: dict},
     )
-    def get(self, request, vista):
-        datos = tnr_total.FiltrosTnrTotalSerializer(data=request.query_params)
+    def get(self, request, indicador, vista):
+        config = tnr.obtener(indicador)
+        datos = tnr.FiltrosTnrSerializer(data=request.query_params)
         datos.is_valid(raise_exception=True)
         filtros = dict(datos.validated_data)
-        tnr_total.verificar_alcance(filtros, request.user)
-        filas = tnr_total.consultar(vista, filtros)
+        tnr.verificar_alcance(filtros, request.user)
+        filas = tnr.consultar(config, vista, filtros)
         columnas = list(filas[0].keys()) if filas else []
 
         if request.query_params.get("formato") == "xlsx":
             ambito = re.sub(r"[^\w .,()\-]", "", request.query_params.get("ambito", ""))[:120]
-            return respuesta_tnr_total(vista, filtros, filas, ambito.strip().upper())
+            return respuesta_tnr(config, vista, filtros, filas, ambito.strip().upper())
         return Response({"vista": vista, "columnas": columnas, "filas": filas})
 
 
-class TnrTotalMapaView(BaseCobertura):
-    @extend_schema(operation_id="cobertura_tnr_total_mapa", responses={200: dict})
-    def get(self, request):
-        return Response(tnr_total.consultar_mapa())
+class TnrMapaView(BaseCobertura):
+    @extend_schema(operation_id="cobertura_tnr_mapa", responses={200: dict})
+    def get(self, request, indicador):
+        return Response(tnr.consultar_mapa(tnr.obtener(indicador)))

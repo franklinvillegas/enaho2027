@@ -47,7 +47,7 @@ export const MENU = [
         grupo: 'Tasa de no respuesta',
         pantallas: [
           { slug: 'tnr-total', titulo: 'Tasa de no respuesta total', migrada: true },
-          { slug: 'tnr-parcial', titulo: 'Tasa de no respuesta parcial', indicador: 'tnr-parcial' },
+          { slug: 'tnr-parcial', titulo: 'Tasa de no respuesta parcial', migrada: true },
           { slug: 'tnr-estrato', titulo: 'Tasa de no respuesta por estrato' },
         ],
       },

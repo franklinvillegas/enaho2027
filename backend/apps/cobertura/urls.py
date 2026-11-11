@@ -1,11 +1,34 @@
 from django.urls import path
 
 from . import views
+from .tasas_no_respuesta import REGISTRO
+
+# Pantallas de tasa de no respuesta (tnr-total, tnr-parcial, ...): mismas rutas para todas.
+#   /<indicador>/          vistas, textos y configuración de gráficos
+#   /<indicador>/mapa/     mapa de calor por departamento
+#   /<indicador>/<vista>/  filas de una vista (departamentos, odei, odei-mes); ?formato=xlsx
+rutas_tnr = [
+    ruta
+    for codigo in REGISTRO
+    for ruta in (
+        path(f"{codigo}/", views.TnrInfoView.as_view(), {"indicador": codigo}, name=codigo),
+        path(
+            f"{codigo}/mapa/",
+            views.TnrMapaView.as_view(),
+            {"indicador": codigo},
+            name=f"{codigo}-mapa",
+        ),
+        path(
+            f"{codigo}/<slug:vista>/",
+            views.TnrVistaView.as_view(),
+            {"indicador": codigo},
+            name=f"{codigo}-vista",
+        ),
+    )
+]
 
 urlpatterns = [
-    path("tnr-total/", views.TnrTotalVistasView.as_view(), name="tnr-total"),
-    path("tnr-total/mapa/", views.TnrTotalMapaView.as_view(), name="tnr-total-mapa"),
-    path("tnr-total/<slug:vista>/", views.TnrTotalView.as_view(), name="tnr-total-vista"),
+    *rutas_tnr,
     path("indicadores/", views.IndicadoresView.as_view(), name="cobertura-indicadores"),
     path("indicadores/<slug:codigo>/", views.IndicadorView.as_view(), name="cobertura-indicador"),
     path(

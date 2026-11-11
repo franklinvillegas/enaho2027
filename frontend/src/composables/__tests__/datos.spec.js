@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { clasificarColumnas, columnasCoordenadas, etiqueta, medidaPrincipal } from '../datos'
-import { MENU, menuPara } from '@/config/menu'
+import { MENU, menuPara, pantallasDe } from '@/config/menu'
 
 describe('clasificarColumnas', () => {
   it('separa columnas de texto y numéricas', () => {
@@ -38,6 +38,12 @@ describe('etiqueta', () => {
 describe('menú', () => {
   it('muestra solo los módulos permitidos', () => {
     expect(menuPara(['cobertura']).map((m) => m.modulo)).toEqual(['cobertura'])
+  })
+  it('agrupa la tasa de no respuesta en un submenú, como el sistema actual', () => {
+    const cobertura = MENU.find((m) => m.modulo === 'cobertura')
+    const grupo = cobertura.pantallas.find((p) => p.grupo === 'Tasa de no respuesta')
+    expect(grupo.pantallas.map((p) => p.slug)).toEqual(['tnr-total', 'tnr-parcial', 'tnr-estrato'])
+    expect(pantallasDe(cobertura)).toHaveLength(9)
   })
   it('tiene los 6 módulos del sistema actual', () => {
     expect(MENU).toHaveLength(6)

@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { MENU, rutaModulo } from '@/config/menu'
+import { MENU, pantallasDe, rutaModulo } from '@/config/menu'
 import { useAuthStore } from '@/stores/auth'
 
 import AppLayout from '@/layouts/AppLayout.vue'
@@ -15,7 +15,7 @@ const EnConstruccion = () => import('@/views/EnConstruccionView.vue')
 
 // Una ruta por pantalla del menú. Las pantallas migradas apuntan a su vista real.
 const rutasPantallas = MENU.flatMap((m) =>
-  m.pantallas.map((p) => ({
+  pantallasDe(m).map((p) => ({
     path: `${rutaModulo(m.modulo)}/${p.slug}`,
     name: `${m.modulo}-${p.slug}`,
     component:

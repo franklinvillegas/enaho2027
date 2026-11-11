@@ -4,6 +4,8 @@
 // - `modulo` coincide con el código del backend (apps/comun/constantes.py → Modulo).
 // - Las pantallas con `indicador` ya están migradas (usan la API nueva).
 // - Las demás muestran "En construcción" hasta que se migren.
+// - Un elemento con `grupo` es un submenú (como en el sistema actual, p. ej. "Tasa de no
+//   respuesta" dentro de cobertura); sus pantallas van en su propio `pantallas`.
 
 export const MENU = [
   {
@@ -41,18 +43,27 @@ export const MENU = [
     titulo: 'Indicadores de cobertura',
     icono: 'mdi-chart-bar',
     pantallas: [
-      { slug: 'tnr-total', titulo: 'Tasa de no respuesta total', migrada: true },
-      { slug: 'tnr-parcial', titulo: 'Tasa de no respuesta parcial', indicador: 'tnr-parcial' },
-      { slug: 'tnr-estrato', titulo: 'Tasa de no respuesta por estrato' },
+      {
+        grupo: 'Tasa de no respuesta',
+        pantallas: [
+          { slug: 'tnr-total', titulo: 'Tasa de no respuesta total', migrada: true },
+          { slug: 'tnr-parcial', titulo: 'Tasa de no respuesta parcial', indicador: 'tnr-parcial' },
+          { slug: 'tnr-estrato', titulo: 'Tasa de no respuesta por estrato' },
+        ],
+      },
       { slug: 'problemas-marco', titulo: 'Tasa de problemas de marco', indicador: 'problemas-marco' },
       {
         slug: 'informacion-indirecta',
         titulo: 'Tasa de información indirecta',
         indicador: 'informacion-indirecta',
       },
-      { slug: 'control-visitas', titulo: 'Control de visitas', indicador: 'control-visitas' },
+      {
+        slug: 'control-visitas',
+        titulo: 'Control de visitas (número de visitas y tiempo)',
+        indicador: 'control-visitas',
+      },
       { slug: 'omision-capitulos', titulo: 'Omisión por capítulos' },
-      { slug: 'omisiones-gps', titulo: 'Porcentaje de omisiones GPS' },
+      { slug: 'omisiones-gps', titulo: 'Porcentaje de omisiones GPS de las viviendas' },
       { slug: 'tipo-entrevista', titulo: 'Tipo de entrevista', indicador: 'tipo-entrevista' },
     ],
   },
@@ -98,6 +109,9 @@ export const MENU = [
     ],
   },
 ]
+
+/** Pantallas de un módulo sin los submenús (para rutas, conteos y accesos directos). */
+export const pantallasDe = (m) => m.pantallas.flatMap((p) => (p.grupo ? p.pantallas : [p]))
 
 export const rutaModulo = (modulo) => `/${modulo.replaceAll('_', '-')}`
 

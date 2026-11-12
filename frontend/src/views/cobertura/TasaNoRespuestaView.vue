@@ -171,7 +171,7 @@ async function exportar() {
   exportando.value = true
   try {
     const titulo = nivel.value === 1 ? 'NACIONAL' : ambito.value
-    const { data } = await api.excel(vista.value, parametros(), titulo)
+    const { data } = await api.excel(vista.value, parametros(), datos.value.filas, titulo)
     const url = URL.createObjectURL(data)
     const prefijoArchivo = (g.value.serie_barras || props.indicador).replace(/_/g, '-').toUpperCase()
     const nombre = `${prefijoArchivo}-${ambito.value.replace(/[^A-Z0-9]+/gi, '-')}.xlsx`

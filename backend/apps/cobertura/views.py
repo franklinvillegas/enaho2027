@@ -1,6 +1,8 @@
 import re
 
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import serializers
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -14,6 +16,38 @@ from . import tasas_no_respuesta as tnr
 from .excel_tnr import respuesta_tnr
 from .indicadores import INDICADORES
 from .repositorios import obtener_repositorio
+
+# --- Excel a partir de lo que la pantalla ya tiene ----------------------------------------
+
+
+class ExcelSerializer(serializers.Serializer):
+    """Filas ya cargadas en la pantalla + filtros con que se consultaron + título del archivo."""
+
+    MAX_FILAS = 50_000
+
+    filtros = serializers.DictField(default=dict)
+    filas = serializers.ListField(child=serializers.DictField(), max_length=MAX_FILAS)
+    titulo = serializers.CharField(allow_blank=True, default="", max_length=500)
+
+    def validate_filas(self, filas):
+        # Solo valores simples (texto, número, vacío): nada de objetos anidados
+        for fila in filas:
+            if len(fila) > 200 or any(
+                v is not None and not isinstance(v, str | int | float | bool) for v in fila.values()
+            ):
+                raise serializers.ValidationError("Formato de filas no válido.")
+        return filas
+
+
+def _validar(serializer, datos) -> dict:
+    s = serializer(data=datos)
+    s.is_valid(raise_exception=True)
+    return dict(s.validated_data)
+
+
+def _texto_limpio(texto: str, largo: int) -> str:
+    """Texto para el título o pie del Excel, sin caracteres raros y acotado."""
+    return re.sub(r"[^\w .,:()\-]", "", texto)[:largo].strip()
 
 
 class BaseCobertura(APIView):
@@ -88,16 +122,11 @@ class TnrVistaView(BaseCobertura):
     """Filas de una vista, tal como las devuelve el procedimiento actual.
 
     Ejemplo: /api/v1/cobertura/tnr-parcial/odei-mes/?sede=15&usuario=0&mes_inicio=1&mes_fin=6
-    Con &formato=xlsx devuelve el mismo resultado en Excel, con el diseño del reporte actual.
     """
 
     @extend_schema(
         operation_id="cobertura_tnr_vista",
-        parameters=[
-            tnr.FiltrosTnrSerializer,
-            OpenApiParameter("formato", str, enum=["json", "xlsx"], required=False),
-            OpenApiParameter("ambito", str, required=False, description="Título del Excel"),
-        ],
+        parameters=[tnr.FiltrosTnrSerializer],
         responses={200: dict},
     )
     def get(self, request, indicador, vista):
@@ -108,11 +137,28 @@ class TnrVistaView(BaseCobertura):
         tnr.verificar_alcance(filtros, request.user)
         filas = tnr.consultar(config, vista, filtros)
         columnas = list(filas[0].keys()) if filas else []
-
-        if request.query_params.get("formato") == "xlsx":
-            ambito = re.sub(r"[^\w .,()\-]", "", request.query_params.get("ambito", ""))[:120]
-            return respuesta_tnr(config, vista, filtros, filas, ambito.strip().upper())
         return Response({"vista": vista, "columnas": columnas, "filas": filas})
+
+
+class TnrExcelView(BaseCobertura):
+    """Excel de la tabla que la pantalla YA cargó: no vuelve a consultar la base.
+
+    La pantalla envía las filas que tiene en memoria, los filtros (para saber el nivel y
+    las columnas) y el título; aquí solo se arma el archivo con el diseño del reporte actual.
+    """
+
+    @extend_schema(
+        operation_id="cobertura_tnr_excel", request=ExcelSerializer, responses={200: bytes}
+    )
+    def post(self, request, indicador, vista):
+        config = tnr.obtener(indicador)
+        if vista not in config.vistas:
+            raise NotFound(f"Vista '{vista}' no existe.")
+        datos = ExcelSerializer(data=request.data)
+        datos.is_valid(raise_exception=True)
+        filtros = _validar(tnr.FiltrosTnrSerializer, datos.validated_data["filtros"])
+        ambito = _texto_limpio(datos.validated_data["titulo"], 120).upper()
+        return respuesta_tnr(config, vista, filtros, datos.validated_data["filas"], ambito)
 
 
 class TnrMapaView(BaseCobertura):
@@ -122,11 +168,6 @@ class TnrMapaView(BaseCobertura):
 
 
 # --- TNR según estrato ---------------------------------------------------------------
-
-
-def _detalle(request) -> str:
-    """Texto del pie del Excel (filtros elegidos), limpio y acotado."""
-    return re.sub(r"[^\w .,:()\-]", "", request.query_params.get("detalle", ""))[:250].strip()
 
 
 class TnrEstratoInfoView(BaseCobertura):
@@ -149,8 +190,6 @@ class TnrEstratoAnualView(BaseCobertura):
         f = dict(datos.validated_data)
         tnr_estrato.verificar_alcance(f["odei"], request.user)
         filas = tnr_estrato.consultar_anual(f)
-        if request.query_params.get("formato") == "xlsx":
-            return excel_estrato.excel_anual(f, filas, _detalle(request))
         return Response({"filas": filas})
 
 
@@ -168,8 +207,6 @@ class TnrEstratoMensualView(BaseCobertura):
         f = dict(datos.validated_data)
         tnr_estrato.verificar_alcance(f["odei"], request.user)
         filas = tnr_estrato.consultar_mensual(f)
-        if request.query_params.get("formato") == "xlsx":
-            return excel_estrato.excel_mensual(f, filas, _detalle(request))
         return Response({"filas": filas})
 
 
@@ -187,6 +224,30 @@ class TnrEstratoHogarView(BaseCobertura):
         f = dict(datos.validated_data)
         tnr_estrato.verificar_alcance(f["odei"], request.user)
         filas = tnr_estrato.consultar_hogar(f)
-        if request.query_params.get("formato") == "xlsx":
-            return excel_estrato.excel_hogar(filas, _detalle(request))
         return Response({"filas": filas})
+
+
+class TnrEstratoExcelView(BaseCobertura):
+    """Excel de una pestaña con las filas que la pantalla YA cargó (no consulta la base)."""
+
+    FILTROS = {
+        "anual": tnr_estrato.FiltrosAnualSerializer,
+        "mensual": tnr_estrato.FiltrosMensualSerializer,
+        "hogar": tnr_estrato.FiltrosHogarSerializer,
+    }
+
+    @extend_schema(
+        operation_id="cobertura_tnr_estrato_excel", request=ExcelSerializer, responses={200: bytes}
+    )
+    def post(self, request, tabla):
+        if tabla not in self.FILTROS:
+            raise NotFound(f"Tabla '{tabla}' no existe.")
+        datos = ExcelSerializer(data=request.data)
+        datos.is_valid(raise_exception=True)
+        f = _validar(self.FILTROS[tabla], datos.validated_data["filtros"])
+        filas = datos.validated_data["filas"]
+        detalle = _texto_limpio(datos.validated_data["titulo"], 250)
+        if tabla == "hogar":
+            return excel_estrato.excel_hogar(filas, detalle)
+        generar = excel_estrato.excel_anual if tabla == "anual" else excel_estrato.excel_mensual
+        return generar(f, filas, detalle)

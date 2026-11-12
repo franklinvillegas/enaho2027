@@ -70,7 +70,15 @@ def test_odei_regional_solo_ve_su_odei(cliente, llamadas):
 
 @pytest.mark.django_db
 def test_excel_anual_con_columnas_por_anio(cliente, llamadas):
-    r = cliente().get(BASE + "anual/", {"formato": "xlsx", "detalle": "NACIONAL URBANO"})
+    c = cliente()
+    filas = c.get(BASE + "anual/").json()["filas"]
+    llamadas.clear()
+    r = c.post(
+        BASE + "anual/excel/",
+        {"filtros": {}, "filas": filas, "titulo": "NACIONAL URBANO"},
+        format="json",
+    )
+    assert llamadas == []
     hoja = load_workbook(BytesIO(r.content)).active
     assert hoja["A2"].value == "TNR SEGÚN ESTRATO POR ODEI ANUAL"
     assert [hoja["A3"].value, hoja["B3"].value] == ["ESTRATOS SOCIOECONOMICOS", 2026]

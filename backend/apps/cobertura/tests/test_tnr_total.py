@@ -92,7 +92,14 @@ def _hoja(respuesta):
 
 @pytest.mark.django_db
 def test_excel_con_el_diseno_del_reporte(cliente, llamadas):
-    hoja = _hoja(cliente().get(BASE + "departamentos/", {"formato": "xlsx"}))
+    c = cliente()
+    filas = c.get(BASE + "departamentos/").json()["filas"]
+    llamadas.clear()
+    r = c.post(
+        BASE + "departamentos/excel/", {"filtros": {}, "filas": filas, "titulo": ""}, format="json"
+    )
+    assert llamadas == []  # el Excel usa las filas ya cargadas: no vuelve a consultar la base
+    hoja = _hoja(r)
     assert hoja["A2"].value == "TNR TOTAL NACIONAL"
     encabezado = [hoja["A3"].value, hoja["B3"].value, hoja["C3"].value]
     assert encabezado == ["N°", "DOMINIOS DE ESTUDIO", "AÑOS"]
@@ -107,8 +114,11 @@ def test_excel_con_el_diseno_del_reporte(cliente, llamadas):
 def test_excel_por_mes_agrupa_por_anio(cliente, monkeypatch):
     fila = {"idMostrar": 0, "nombreMostrar": "NACIONAL", "tnr2026": 7, "tnr2026_abs": 1873,
             "enero_2026": 5.5, "enero_2026_abs": 134}  # fmt: skip
-    monkeypatch.setattr(sistema_actual, "ejecutar_procedimiento", lambda *a, **k: [fila])
-    r = cliente().get(BASE + "odei-mes/", {"formato": "xlsx", "ambito": "SEDE LIMA=1"})
+    r = cliente().post(
+        BASE + "odei-mes/excel/",
+        {"filtros": {}, "filas": [fila], "titulo": "SEDE LIMA=1"},
+        format="json",
+    )
     hoja = _hoja(r)
     assert hoja["A2"].value == "TNR TOTAL SEDE LIMA1"
     assert hoja["C4"].value == 2026
@@ -126,3 +136,9 @@ def test_info_de_la_pantalla(cliente, llamadas):
     datos = cliente().get(BASE).json()
     assert [v["codigo"] for v in datos["vistas"]] == ["departamentos", "odei", "odei-mes"]
     assert "rechazo" in datos["formula"]
+
+
+@pytest.mark.django_db
+def test_excel_rechaza_filas_con_objetos_anidados(cliente):
+    r = cliente().post(BASE + "odei/excel/", {"filas": [{"a": {"b": 1}}]}, format="json")
+    assert r.status_code == 400

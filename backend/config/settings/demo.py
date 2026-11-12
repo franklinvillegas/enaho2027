@@ -10,6 +10,8 @@ Usa SQLite local para usuarios y datos de EJEMPLO inventados para los indicadore
 import os
 
 os.environ.setdefault("DJANGO_SECRET_KEY", "clave-solo-para-demo")
+# El frontend de desarrollo (Vite) envía Origin http://localhost:5173
+os.environ.setdefault("CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 for _base in ("MONITOREO", "ACTUAL"):
     for _campo in ("NAME", "HOST", "USER", "PASSWORD"):
         os.environ.setdefault(f"DB_{_base}_{_campo}", "demo")

@@ -106,8 +106,10 @@ const cargarAnual = () => cargar(async () => {
   if (nivelAnual.value === 1) datosGrafico.value = datosAnual.value
 })
 const cargarMensual = () => cargar(async () => { datosMensual.value = (await api.tabla('mensual', paramsMensual())).data.filas })
+const hogarAplicado = ref({ odei: 0, mes: 0 }) // filtros con que se cargó la tabla de hogares
 const cargarHogar = () => cargar(async () => {
-  datosHogar.value = (await api.tabla('hogar', paramsHogar())).data.filas
+  hogarAplicado.value = paramsHogar()
+  datosHogar.value = (await api.tabla('hogar', hogarAplicado.value)).data.filas
   hogarCargado.value = true
 })
 
@@ -186,8 +188,9 @@ function textoFiltros() {
 }
 const detalle = computed(() => {
   if (pestana.value === 'hogar') {
-    const odei = opcionesOdei.value.find((o) => o.value === filtrosHogar.odei)?.title ?? ''
-    return `${odei} - ${filtrosHogar.mes ? MESES[filtrosHogar.mes - 1] : 'Anual'}`
+    const { odei, mes } = hogarAplicado.value
+    const nombre = opcionesOdei.value.find((o) => o.value === odei)?.title ?? ''
+    return `${nombre} - ${mes ? MESES[mes - 1] : 'Anual'}`
   }
   const migas = (pestana.value === 'mensual' ? migasMensual : migasAnual).value.map((m) => m.texto).join(' - ')
   return `${migas}, ${textoFiltros()}`
@@ -215,9 +218,16 @@ const COLUMNAS_HOGAR = [
 async function exportar() {
   exportando.value = true
   try {
-    const tabla = pestana.value === 'grafico' ? 'anual' : pestana.value
-    const params = { anual: paramsAnual, mensual: paramsMensual, hogar: paramsHogar }[tabla]()
-    const { data } = await api.excel(tabla, params, detalle.value)
+    // Se exporta lo que ya está en pantalla (el gráfico exporta su tabla nacional)
+    const p = pestana.value
+    const tabla = p === 'grafico' ? 'anual' : p
+    const [filtrosTabla, filas] = {
+      grafico: [{ ...aplicados.value, tipo: 0, estrato: 0, odei: '00' }, datosGrafico.value],
+      anual: [paramsAnual(), datosAnual.value],
+      mensual: [paramsMensual(), datosMensual.value],
+      hogar: [hogarAplicado.value, datosHogar.value],
+    }[p]
+    const { data } = await api.excel(tabla, filtrosTabla, filas, detalle.value)
     const url = URL.createObjectURL(data)
     Object.assign(document.createElement('a'), { href: url, download: `TNR_segun_estrato_${tabla}.xlsx` }).click()
     URL.revokeObjectURL(url)

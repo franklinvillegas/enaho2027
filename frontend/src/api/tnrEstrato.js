@@ -6,6 +6,7 @@ const base = '/cobertura/tnr-estrato'
 export default {
   info: () => http.get(`${base}/`),
   tabla: (tabla, params) => http.get(`${base}/${tabla}/`, { params }),
-  excel: (tabla, params, detalle) =>
-    http.get(`${base}/${tabla}/`, { params: { ...params, detalle, formato: 'xlsx' }, responseType: 'blob' }),
+  // Excel de las filas ya cargadas en la pestaña: no vuelve a consultar la base
+  excel: (tabla, filtros, filas, titulo) =>
+    http.post(`${base}/${tabla}/excel/`, { filtros, filas, titulo }, { responseType: 'blob' }),
 }

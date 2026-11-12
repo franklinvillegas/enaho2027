@@ -64,7 +64,8 @@ def test_info_sin_filtros_extra(cliente, llamadas):
 
 @pytest.mark.django_db
 def test_excel_con_absoluto_por_anio(cliente, llamadas):
-    r = cliente.get(BASE + "departamentos/", {"formato": "xlsx"})
+    filas = cliente.get(BASE + "departamentos/").json()["filas"]
+    r = cliente.post(BASE + "departamentos/excel/", {"filas": filas}, format="json")
     hoja = load_workbook(BytesIO(r.content)).active
     assert hoja["A2"].value == "TNR PARCIAL NACIONAL"
     assert [hoja["C4"].value, hoja["D4"].value] == ["2026", "Abs."]
@@ -73,17 +74,14 @@ def test_excel_con_absoluto_por_anio(cliente, llamadas):
 
 
 @pytest.mark.django_db
-def test_excel_detalle_de_conglomerado(cliente, monkeypatch):
+def test_excel_detalle_de_conglomerado(cliente):
     filas = [
         {"id": 0, "tnrp_2026": 8.9},
         {"id": 1, "mes": "03", "conglomerado": "123456", "vivienda": "001", "hogar": "11",
          "tnrp_2026": 100},
     ]  # fmt: skip
-    monkeypatch.setattr(sistema_actual, "ejecutar_procedimiento", lambda *a, **k: filas)
-    r = cliente.get(
-        BASE + "odei-mes/",
-        {"formato": "xlsx", "sede": "15", "usuario": "12345678", "conglomerado": "123456"},
-    )
+    filtros = {"sede": "15", "usuario": "12345678", "conglomerado": "123456"}
+    r = cliente.post(BASE + "odei-mes/excel/", {"filtros": filtros, "filas": filas}, format="json")
     hoja = load_workbook(BytesIO(r.content)).active
     assert [hoja.cell(3, c).value for c in range(1, 7)] == [
         "N°", "MES", "CONGLOMERADO", "VIVIENDA", "HOGAR", "TNR Parcial (VALORES PORCENTUALES)",
@@ -92,14 +90,15 @@ def test_excel_detalle_de_conglomerado(cliente, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_excel_numero_de_fila_como_lo_envia_el_procedimiento(cliente, monkeypatch):
+def test_excel_numero_de_fila_como_lo_envia_el_procedimiento(cliente):
     filas = [
         {"id": 0, "idMostrar": "00", "nombreMostrar": "NACIONAL", "encuestador": "TOTAL",
          "tnrp_2026": 1},
         {"id": 1, "idMostrar": "14", "usuario": "167", "encuestador": "PATRICIA", "tnrp_2026": 2},
         {"id": 2, "idMostrar": "14", "usuario": "168", "encuestador": "JUAN", "tnrp_2026": 3},
     ]  # fmt: skip
-    monkeypatch.setattr(sistema_actual, "ejecutar_procedimiento", lambda *a, **k: filas)
-    r = cliente.get(BASE + "odei/", {"formato": "xlsx", "sede": "14"})
+    r = cliente.post(
+        BASE + "odei/excel/", {"filtros": {"sede": "14"}, "filas": filas}, format="json"
+    )
     hoja = load_workbook(BytesIO(r.content)).active
     assert [hoja.cell(f, 1).value for f in (5, 6, 7)] == [None, 1, 2]

@@ -6,7 +6,8 @@ from .tasas_no_respuesta import REGISTRO
 # Pantallas de tasa de no respuesta (tnr-total, tnr-parcial, ...): mismas rutas para todas.
 #   /<indicador>/          vistas, textos y configuración de gráficos
 #   /<indicador>/mapa/     mapa de calor por departamento
-#   /<indicador>/<vista>/  filas de una vista (departamentos, odei, odei-mes); ?formato=xlsx
+#   /<indicador>/<vista>/  filas de una vista (departamentos, odei, odei-mes)
+#   /<indicador>/<vista>/excel/  POST: Excel de las filas que la pantalla ya cargó
 rutas_tnr = [
     ruta
     for codigo in REGISTRO
@@ -17,6 +18,12 @@ rutas_tnr = [
             views.TnrMapaView.as_view(),
             {"indicador": codigo},
             name=f"{codigo}-mapa",
+        ),
+        path(
+            f"{codigo}/<slug:vista>/excel/",
+            views.TnrExcelView.as_view(),
+            {"indicador": codigo},
+            name=f"{codigo}-excel",
         ),
         path(
             f"{codigo}/<slug:vista>/",
@@ -33,6 +40,11 @@ rutas_estrato = [
     path("tnr-estrato/anual/", views.TnrEstratoAnualView.as_view(), name="tnr-estrato-anual"),
     path("tnr-estrato/mensual/", views.TnrEstratoMensualView.as_view(), name="tnr-estrato-mensual"),
     path("tnr-estrato/hogar/", views.TnrEstratoHogarView.as_view(), name="tnr-estrato-hogar"),
+    path(
+        "tnr-estrato/<slug:tabla>/excel/",
+        views.TnrEstratoExcelView.as_view(),
+        name="tnr-estrato-excel",
+    ),
 ]
 
 urlpatterns = [

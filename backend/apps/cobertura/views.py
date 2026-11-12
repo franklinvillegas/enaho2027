@@ -15,6 +15,7 @@ from . import (  # noqa: F401 (las configuraciones registran su pantalla)
     excel_estrato,
     informacion_indirecta,
     problemas_marco,
+    reportes,
     servicios,
     tnr_estrato,
     tnr_parcial,
@@ -292,3 +293,24 @@ class TnrEstratoExcelView(BaseCobertura):
             return excel_estrato.excel_hogar(filas, detalle)
         generar = excel_estrato.excel_anual if tabla == "anual" else excel_estrato.excel_mensual
         return generar(f, filas, detalle)
+
+
+# --- Control de visitas, omisión por capítulos, omisiones GPS y tipo de entrevista ------
+
+
+class ReporteView(BaseCobertura):
+    """Filas de una vista de las pantallas con estructura propia (ver reportes.py).
+
+    Ejemplo: /api/v1/cobertura/reportes/control-visitas/odei-mes/?sede=14&excluir=1
+    """
+
+    @extend_schema(
+        operation_id="cobertura_reporte",
+        parameters=[reportes.FiltrosReporteSerializer],
+        responses={200: dict},
+    )
+    def get(self, request, pantalla, vista):
+        reportes.obtener(pantalla, vista)
+        f = _validar(reportes.FiltrosReporteSerializer, request.query_params)
+        reportes.verificar_alcance(f, request.user)
+        return Response({"filas": reportes.consultar(pantalla, vista, f)})

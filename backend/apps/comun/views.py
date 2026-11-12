@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
+from . import excel_tabla
 from .constantes import ODEI_NACIONAL, ODEIS
 from .serializers import LoginSerializer, RegistroUsoSerializer, UsuarioActualSerializer
 
@@ -84,3 +85,13 @@ class RegistroUsoView(APIView):
         datos.is_valid(raise_exception=True)
         datos.save(usuario=request.user)
         return Response(status=status.HTTP_201_CREATED)
+
+
+class ExcelTablaView(APIView):
+    """Excel de una tabla que la pantalla ya cargó (no consulta la base)."""
+
+    @extend_schema(request=excel_tabla.TablaExcelSerializer, responses={200: bytes})
+    def post(self, request):
+        datos = excel_tabla.TablaExcelSerializer(data=request.data)
+        datos.is_valid(raise_exception=True)
+        return excel_tabla.respuesta(datos.validated_data)

@@ -60,6 +60,12 @@ rutas_estrato = [
 ]
 
 urlpatterns = [
+    # Control de visitas, omisión por capítulos, omisiones GPS y tipo de entrevista
+    path(
+        "reportes/<slug:pantalla>/<slug:vista>/",
+        views.ReporteView.as_view(),
+        name="cobertura-reporte",
+    ),
     *rutas_tnr,
     *rutas_estrato,
     path("indicadores/", views.IndicadoresView.as_view(), name="cobertura-indicadores"),

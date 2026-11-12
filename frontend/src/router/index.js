@@ -6,6 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import InicioView from '@/views/InicioView.vue'
 
+const ReporteCobertura = () => import('@/views/cobertura/ReporteCoberturaView.vue')
 const IndicadorCobertura = () => import('@/views/cobertura/IndicadorCoberturaView.vue')
 const TasaNoRespuesta = () => import('@/views/cobertura/TasaNoRespuestaView.vue')
 
@@ -18,6 +19,9 @@ const VISTAS_PROPIAS = {
   'cobertura/informacion-indirecta': { component: TasaNoRespuesta, props: { indicador: 'informacion-indirecta' } },
   // TNR según estrato tiene otra estructura (cuatro pestañas): vista propia
   'cobertura/tnr-estrato': { component: () => import('@/views/cobertura/TnrEstratoView.vue') },
+  // Reportes con tablas agrupadas: una vista genérica guiada por config/reportesCobertura
+  ...Object.fromEntries(['control-visitas', 'omision-capitulos', 'omisiones-gps', 'tipo-entrevista'].map((p) => [
+    `cobertura/${p}`, { component: ReporteCobertura, props: { pantalla: p } }])),
 }
 const EnConstruccion = () => import('@/views/EnConstruccionView.vue')
 

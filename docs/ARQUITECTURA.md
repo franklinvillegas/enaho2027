@@ -78,6 +78,8 @@ Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
 | GET | `/api/v1/cobertura/{tnr}/{vista}/` | Filas de una vista (`departamentos`, `odei`, `odei-mes`); `sede`, `usuario`, `conglomerado` para bajar de nivel; `&formato=xlsx` |
 | GET | `/api/v1/cobertura/{tnr}/mapa/` | Mapa de calor por departamento |
 | GET | `/api/v1/cobertura/informacion-indirecta/absolutos/` | Valores absolutos por encuestador de una sede (`sede`, `solo_activos`, rango) |
+| GET | `/api/v1/cobertura/reportes/{pantalla}/{vista}/` | Control de visitas, omisión por capítulos, omisiones GPS y tipo de entrevista (ver abajo) |
+| POST | `/api/v1/excel/` | Excel de la tabla que la pantalla ya muestra (sin volver a consultar la base) |
 | GET | `/api/v1/cobertura/tnr-estrato/{anual,mensual,hogar}/` | TNR según estrato (`tipo`, `estrato`, `odei`, `conglomerado`, rango de meses y periodos, `excluir`; hogar: `odei`, `mes`); `&formato=xlsx` |
 
 Documentación completa: `/api/docs/`.
@@ -120,6 +122,39 @@ anual, por mes y hogares), por eso tiene su propio módulo (`tnr_estrato.py`,
 Para agregar otra pantalla con el mismo esquema (p. ej. TNR por estrato): crear su
 configuración en el backend, sumarla a `VISTAS_PROPIAS` en `router/index.js` y marcarla
 `migrada: true` en el menú.
+
+### Control de visitas, omisión por capítulos, omisiones GPS y tipo de entrevista
+
+Estas cuatro pantallas tienen tablas con encabezados agrupados (años × dos medidas,
+capítulos × años, meses × capítulos...). Comparten:
+
+- Backend: `apps/cobertura/reportes.py` — por pantalla y vista, el procedimiento y el orden
+  de parámetros (lista blanca), el alcance por ODEI y el modo demo. Una sola ruta:
+  `/cobertura/reportes/{pantalla}/{vista}/`.
+
+  | Pantalla | Vistas → procedimiento |
+  |---|---|
+  | `control-visitas` | `departamentos` → cobertura_controlVisitas_dep · `odei` → enaho2016_visitas_odei_anio · `odei-mes` → enaho2016_visitas_odei_mes · `casos` → cobertura_controlVisitas_casos |
+  | `omision-capitulos` | `grafico` → enaho2015_calidad_ind02 · `anio` → ENAHO2020_CALIDAD_OMISIONCAPITULOS_ANIO · `mes` → ENAHO2020_CALIDAD_OMISIONCAPITULOS_MES · `mapa` → enaho2015_omision_capitulo_map |
+  | `omisiones-gps` | `resumen` → enaho2016_geo_omisiones · `viviendas` → enaho2015_cobertura_ind01_2 |
+  | `tipo-entrevista` | `departamentos` → cobertura_tipoEntrevista_dep · `odei` → enaho2021_tipoEntrevista_odei · `odei-mes` → enaho2021_tipoEntrevista_odeiMes |
+
+- Excel genérico: `apps/comun/excel_tabla.py` (`POST /api/v1/excel/`). La pantalla envía la
+  tabla tal como la dibuja (encabezados con celdas combinadas, filas, celdas en rojo) y el
+  backend solo arma el .xlsx con el diseño del reporte. Sirve para cualquier pantalla futura.
+- Frontend: una vista genérica `views/cobertura/ReporteCoberturaView.vue` + la tabla
+  `components/reportes/TablaReporte.vue`. Lo propio de cada pantalla está en
+  `config/reportesCobertura/<pantalla>.js`: vistas, pestañas, filtros, qué consultar,
+  cómo se arma la tabla (`tabla(filas, ctx)`), gráficos y textos. Los años y meses salen
+  de los datos o del año en curso: no hay que tocar código al cambiar de año.
+- Grupos de columnas que se abren y cierran (± en omisión por capítulos): la celda de
+  encabezado lleva `alternar` y `columnasCerrado`; las celdas del grupo llevan `grupo`.
+
+Mejoras respecto al sistema actual:
+- El detalle de viviendas de omisiones GPS llamaba mal al procedimiento (faltaba el año);
+  aquí la llamada va completa, y cada vivienda con GPS tiene el enlace "Ver mapa".
+- Una consulta a la vez y sin repetir la misma; ventana de espera que bloquea la pantalla.
+- El Excel exporta exactamente lo que se ve (con los grupos abiertos o cerrados).
 
 ## Cómo migrar una pantalla nueva
 

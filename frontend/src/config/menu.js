@@ -53,14 +53,10 @@ export const MENU = [
       },
       { slug: 'problemas-marco', titulo: 'Tasa de problemas de marco', migrada: true },
       { slug: 'informacion-indirecta', titulo: 'Tasa de información indirecta', migrada: true },
-      {
-        slug: 'control-visitas',
-        titulo: 'Control de visitas (número de visitas y tiempo)',
-        indicador: 'control-visitas',
-      },
-      { slug: 'omision-capitulos', titulo: 'Omisión por capítulos' },
-      { slug: 'omisiones-gps', titulo: 'Porcentaje de omisiones GPS de las viviendas' },
-      { slug: 'tipo-entrevista', titulo: 'Tipo de entrevista', indicador: 'tipo-entrevista' },
+      { slug: 'control-visitas', titulo: 'Control de visitas (número de visitas y tiempo)', migrada: true },
+      { slug: 'omision-capitulos', titulo: 'Omisión por capítulos', migrada: true },
+      { slug: 'omisiones-gps', titulo: 'Porcentaje de omisiones GPS de las viviendas', migrada: true },
+      { slug: 'tipo-entrevista', titulo: 'Tipo de entrevista', migrada: true },
     ],
   },
   {

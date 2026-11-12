@@ -1,4 +1,5 @@
 import pytest
+from django.conf import settings
 from rest_framework.test import APIClient
 
 from apps.comun.acceso import modulos_permitidos
@@ -41,7 +42,7 @@ def test_login_yo_y_logout(crear):
     crear()
     c = APIClient(enforce_csrf_checks=True)
     assert c.get("/api/v1/auth/csrf/").status_code == 204
-    token = c.cookies["csrftoken"].value
+    token = c.cookies[settings.CSRF_COOKIE_NAME].value
     r = c.post(
         "/api/v1/auth/login/",
         {"usuario": "u0", "password": "clave-segura-123"},
@@ -50,7 +51,7 @@ def test_login_yo_y_logout(crear):
     )
     assert r.status_code == 200, r.content
     assert r.json()["usuario"] == "u0"
-    token = c.cookies["csrftoken"].value
+    token = c.cookies[settings.CSRF_COOKIE_NAME].value
     assert c.get("/api/v1/auth/yo/").json()["modulos"]
     assert c.post("/api/v1/auth/logout/", HTTP_X_CSRFTOKEN=token).status_code == 204
     assert c.get("/api/v1/auth/yo/").status_code == 403

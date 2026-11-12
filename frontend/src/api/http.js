@@ -4,7 +4,7 @@ import axios from 'axios'
 const http = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
-  xsrfCookieName: 'csrftoken',
+  xsrfCookieName: 'enaho2027_csrftoken', // mismo nombre que CSRF_COOKIE_NAME del backend
   xsrfHeaderName: 'X-CSRFToken',
   timeout: 60000,
 })

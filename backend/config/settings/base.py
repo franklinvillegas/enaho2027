@@ -144,6 +144,12 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 # Cookies: la sesión no es legible desde JavaScript. El token CSRF sí debe serlo
 # para que el frontend lo envíe en la cabecera X-CSRFToken.
 SESSION_COOKIE_HTTPONLY = True
+# Nombres propios: las cookies se comparten entre todos los puertos de un mismo servidor
+# (localhost:8000, localhost:5173...). Con los nombres por defecto de Django (sessionid,
+# csrftoken) este sistema y el monitoreo actual, si corren en la misma máquina, se pisan
+# la sesión uno al otro: al entrar en uno se cierra el otro.
+SESSION_COOKIE_NAME = "enaho2027_sesion"
+CSRF_COOKIE_NAME = "enaho2027_csrftoken"
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"

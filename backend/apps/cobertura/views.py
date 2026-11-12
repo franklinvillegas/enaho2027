@@ -11,7 +11,14 @@ from apps.comun.exportar import respuesta_excel
 from apps.comun.filtros import FiltrosIndicadorSerializer
 from apps.comun.permisos import AccesoModulo
 
-from . import excel_estrato, servicios, tnr_estrato, tnr_parcial, tnr_total  # noqa: F401
+from . import (  # noqa: F401 (problemas_marco, tnr_parcial y tnr_total registran su pantalla)
+    excel_estrato,
+    problemas_marco,
+    servicios,
+    tnr_estrato,
+    tnr_parcial,
+    tnr_total,
+)
 from . import tasas_no_respuesta as tnr
 from .excel_tnr import respuesta_tnr
 from .indicadores import INDICADORES

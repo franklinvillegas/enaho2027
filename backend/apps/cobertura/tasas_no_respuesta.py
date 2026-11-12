@@ -169,7 +169,8 @@ _SEDES = ["AMAZONAS", "ANCASH-HUARAZ", "ANCASH-CHIMBOTE", "APURIMAC", "AREQUIPA"
 def demo(indicador: IndicadorTnr, vista: str, filtros: dict) -> list[dict]:
     p = indicador.prefijo
     anio = date.today().year
-    con_abs = indicador.codigo != "tnr-total"  # en la parcial cada año trae su absoluto
+    con_abs = indicador.codigo == "tnr-parcial"  # en la parcial cada año trae su absoluto
+    abs_mes = indicador.codigo != "problemas-marco"  # problemas de marco no trae absolutos
     r = random.Random(f"{indicador.codigo}-{vista}-{filtros['sede']}-{filtros['usuario']}")
 
     def anios():
@@ -184,10 +185,12 @@ def demo(indicador: IndicadorTnr, vista: str, filtros: dict) -> list[dict]:
         fila = {}
         for a in (anio,) if solo_actual else (anio - 1, anio):
             fila[f"{p}{a}"] = round(r.uniform(4, 9), 1)
-            fila[f"{p}{a}_abs"] = r.randint(80, 2000)
+            if abs_mes:
+                fila[f"{p}{a}_abs"] = r.randint(80, 2000)
             for m in MESES:
                 fila[f"{m}_{a}"] = round(r.uniform(0, 12), 1)
-                fila[f"{m}_{a}_abs"] = r.randint(0, 200)
+                if abs_mes:
+                    fila[f"{m}_{a}_abs"] = r.randint(0, 200)
         return fila
 
     if vista == "departamentos":

@@ -51,7 +51,7 @@ export const MENU = [
           { slug: 'tnr-estrato', titulo: 'Tasa de no respuesta por estrato', migrada: true },
         ],
       },
-      { slug: 'problemas-marco', titulo: 'Tasa de problemas de marco', indicador: 'problemas-marco' },
+      { slug: 'problemas-marco', titulo: 'Tasa de problemas de marco', migrada: true },
       {
         slug: 'informacion-indirecta',
         titulo: 'Tasa de información indirecta',

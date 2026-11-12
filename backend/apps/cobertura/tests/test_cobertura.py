@@ -7,7 +7,7 @@ from apps.cobertura.indicadores import INDICADORES
 from apps.comun import sistema_actual
 from apps.comun.filtros import Nivel
 
-URL = "/api/v1/cobertura/indicadores/problemas-marco/"
+URL = "/api/v1/cobertura/indicadores/informacion-indirecta/"
 RANGO = {"periodo_inicio": 1, "periodo_fin": 3, "mes_inicio": 1, "mes_fin": 6}
 
 
@@ -49,13 +49,13 @@ def cliente(django_user_model):
 def test_parametros_con_el_formato_del_sistema_actual(cliente, repo):
     r = cliente().get(URL, {"nivel": "departamento", **RANGO})
     assert r.status_code == 200
-    assert repo.llamadas == [("cobertura_tasaProblemasMarco_dep", ["1", "3", "01", "06"])]
+    assert repo.llamadas == [("cobertura_tasaInformacionIndirecta_dep", ["1", "3", "01", "06"])]
 
 
 @pytest.mark.django_db
 def test_sin_filtros_envia_todos(cliente, repo):
     assert cliente().get(URL).status_code == 200
-    assert repo.llamadas == [("cobertura_tasaProblemasMarco_dep", ["0", "0", "00", "00"])]
+    assert repo.llamadas == [("cobertura_tasaInformacionIndirecta_dep", ["0", "0", "00", "00"])]
 
 
 @pytest.mark.django_db

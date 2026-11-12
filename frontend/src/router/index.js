@@ -15,6 +15,7 @@ const VISTAS_PROPIAS = {
   'cobertura/tnr-total': { component: TasaNoRespuesta, props: { indicador: 'tnr-total' } },
   'cobertura/tnr-parcial': { component: TasaNoRespuesta, props: { indicador: 'tnr-parcial' } },
   'cobertura/problemas-marco': { component: TasaNoRespuesta, props: { indicador: 'problemas-marco' } },
+  'cobertura/informacion-indirecta': { component: TasaNoRespuesta, props: { indicador: 'informacion-indirecta' } },
   // TNR según estrato tiene otra estructura (cuatro pestañas): vista propia
   'cobertura/tnr-estrato': { component: () => import('@/views/cobertura/TnrEstratoView.vue') },
 }

@@ -11,8 +11,9 @@ from apps.comun.exportar import respuesta_excel
 from apps.comun.filtros import FiltrosIndicadorSerializer
 from apps.comun.permisos import AccesoModulo
 
-from . import (  # noqa: F401 (problemas_marco, tnr_parcial y tnr_total registran su pantalla)
+from . import (  # noqa: F401 (las configuraciones registran su pantalla)
     excel_estrato,
+    informacion_indirecta,
     problemas_marco,
     servicios,
     tnr_estrato,
@@ -20,7 +21,7 @@ from . import (  # noqa: F401 (problemas_marco, tnr_parcial y tnr_total registra
     tnr_total,
 )
 from . import tasas_no_respuesta as tnr
-from .excel_tnr import respuesta_tnr
+from .excel_tnr import respuesta_absolutos, respuesta_tnr
 from .indicadores import INDICADORES
 from .repositorios import obtener_repositorio
 
@@ -166,6 +167,39 @@ class TnrExcelView(BaseCobertura):
         filtros = _validar(tnr.FiltrosTnrSerializer, datos.validated_data["filtros"])
         ambito = _texto_limpio(datos.validated_data["titulo"], 120).upper()
         return respuesta_tnr(config, vista, filtros, datos.validated_data["filas"], ambito)
+
+
+class TnrAbsolutosView(BaseCobertura):
+    """Valores absolutos por encuestador de una sede (información indirecta, vista por mes)."""
+
+    @extend_schema(
+        operation_id="cobertura_tnr_absolutos",
+        parameters=[tnr.FiltrosTnrSerializer],
+        responses={200: dict},
+    )
+    def get(self, request, indicador):
+        config = tnr.obtener(indicador)
+        filtros = _validar(tnr.FiltrosTnrSerializer, request.query_params)
+        tnr.verificar_alcance(filtros, request.user)
+        return Response({"filas": tnr.consultar_absolutos(config, filtros)})
+
+
+class TnrAbsolutosExcelView(BaseCobertura):
+    """Excel de la tabla de absolutos ya cargada (no consulta la base)."""
+
+    @extend_schema(
+        operation_id="cobertura_tnr_absolutos_excel",
+        request=ExcelSerializer,
+        responses={200: bytes},
+    )
+    def post(self, request, indicador):
+        config = tnr.obtener(indicador)
+        if not config.absolutos:
+            raise NotFound("Esta pantalla no tiene tabla de valores absolutos.")
+        datos = ExcelSerializer(data=request.data)
+        datos.is_valid(raise_exception=True)
+        ambito = _texto_limpio(datos.validated_data["titulo"], 120).upper()
+        return respuesta_absolutos(config, datos.validated_data["filas"], ambito)
 
 
 class TnrMapaView(BaseCobertura):

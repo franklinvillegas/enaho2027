@@ -11,5 +11,9 @@ export default function apiTnr(indicador) {
     excel: (vista, filtros, filas, titulo) =>
       http.post(`${base}/${vista}/excel/`, { filtros, filas, titulo }, { responseType: 'blob' }),
     mapa: () => http.get(`${base}/mapa/`),
+    // Valores absolutos por encuestador (solo información indirecta)
+    absolutos: (filtros) => http.get(`${base}/absolutos/`, { params: filtros }),
+    excelAbsolutos: (filas, titulo) =>
+      http.post(`${base}/absolutos/excel/`, { filas, titulo }, { responseType: 'blob' }),
   }
 }

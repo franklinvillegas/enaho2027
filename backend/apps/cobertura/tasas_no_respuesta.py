@@ -64,10 +64,18 @@ class IndicadorTnr:
     grafico: dict = field(default_factory=dict)
     # Encabezado en vez de "AÑOS" en el detalle de un conglomerado (nivel 4)
     titulo_detalle: str = "AÑOS"
+    # Encabezado de las columnas en la vista por mes (información indirecta lo cambia)
+    titulo_meses: str = "AÑOS"
+    # Tabla extra de valores absolutos por encuestador, debajo de la tabla de una sede en
+    # la vista por ODEI y mes (solo información indirecta)
+    absolutos: Vista | None = None
+    # Título de la pantalla si no es el título en mayúsculas ("INFORMACIÓN INDIRECTA")
+    titulo_pantalla: str = ""
 
     @property
     def procedimientos(self) -> list[str]:
-        return [self.procedimiento_mapa, *(v.procedimiento for v in self.vistas.values())]
+        extra = [self.absolutos.procedimiento] if self.absolutos else []
+        return [self.procedimiento_mapa, *(v.procedimiento for v in self.vistas.values()), *extra]
 
     def info(self) -> dict:
         """Lo que la pantalla necesita para dibujarse (títulos, vistas, gráficos)."""
@@ -80,6 +88,9 @@ class IndicadorTnr:
             "filtros_extra": list(self.filtros_extra),
             "colorear_ultimo": self.colorear_ultimo,
             "titulo_detalle": self.titulo_detalle,
+            "titulo_meses": self.titulo_meses,
+            "titulo_pantalla": self.titulo_pantalla or self.titulo.upper(),
+            "absolutos": self.absolutos.nombre if self.absolutos else None,
             "grafico": self.grafico,
             "vistas": [{"codigo": k, "nombre": v.nombre} for k, v in self.vistas.items()],
         }
@@ -147,6 +158,15 @@ def consultar(indicador: IndicadorTnr, vista: str, filtros: dict) -> list[dict]:
         return demo(indicador, vista, filtros)
     parametros = [str(p) for p in config.parametros(filtros)]
     return sistema_actual.ejecutar_procedimiento(config.procedimiento, parametros)
+
+
+def consultar_absolutos(indicador: IndicadorTnr, filtros: dict) -> list[dict]:
+    if not indicador.absolutos:
+        raise NotFound("Esta pantalla no tiene tabla de valores absolutos.")
+    if settings.FUENTE_COBERTURA == "demo":
+        return demo_absolutos(filtros)
+    parametros = [str(p) for p in indicador.absolutos.parametros(filtros)]
+    return sistema_actual.ejecutar_procedimiento(indicador.absolutos.procedimiento, parametros)
 
 
 def consultar_mapa(indicador: IndicadorTnr) -> list[dict]:
@@ -253,3 +273,23 @@ def demo_mapa(indicador: IndicadorTnr) -> list[dict]:
             "LIMA", "LORETO", "MADRE DE DIOS", "MOQUEGUA", "PASCO", "PIURA", "PUNO",
             "SAN MARTIN", "TACNA", "TUMBES", "UCAYALI"]  # fmt: skip
     return [{"departamento": d, "indicador": round(r.uniform(1, 15), 1)} for d in deps]
+
+
+MESES_ABS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "set", "oct", "nov", "dic"]
+
+
+def demo_absolutos(filtros: dict) -> list[dict]:
+    """Valores absolutos por encuestador (información indirecta), inventados."""
+    r = random.Random(f"abs-{filtros['sede']}")
+    anio = date.today().year
+    filas = []
+    for k in range(1, 11):
+        fila = {"nomencue": f"ENCUESTADOR {k:02d}", "activo": r.choice(["SI", "NO"])}
+        for a in (anio - 1, anio):
+            fila[f"indirecta{a}"] = r.randint(0, 40)
+            fila[f"tot{a}"] = r.randint(100, 400)
+            for m, nombre in enumerate(MESES_ABS, 1):
+                fila[f"ind_{nombre}{a}"] = r.randint(0, 5)
+                fila[f"tot{a}_{m}"] = r.randint(5, 40)
+        filas.append(fila)
+    return filas

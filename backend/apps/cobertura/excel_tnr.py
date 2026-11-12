@@ -100,6 +100,8 @@ def _columnas_fijas(vista: str, nivel: int, columnas: list[str]):
     # Detalle de un conglomerado: N° | MES | CONGLOMERADO | VIVIENDA | HOGAR | valores
     izq = [("mes", "MES")] if nivel == 4 else []
     tras = [("vivienda", "VIVIENDA"), ("hogar", "HOGAR")] if nivel == 4 else []
+    if nivel == 2 and vista == "odei-mes":
+        tras = [("activo", "ACTIVO")]  # encuestador activo, como la pantalla actual
     der = [("tipEnc", "TIPO DE ENCUESTA"), ("viv", "VIVIENDAS TRABAJADAS")] if nivel == 3 else []
     return (
         [c for c in izq if c[0] in columnas],
@@ -189,7 +191,10 @@ def libro_tnr(
         col += 1
     inicio_datos = col
     if datos:
-        titulo_anios = indicador.titulo_detalle if nivel == 4 else "AÑOS"
+        if nivel == 4:
+            titulo_anios = indicador.titulo_detalle
+        else:
+            titulo_anios = indicador.titulo_meses if tipo == "meses" else "AÑOS"
         encabezado(primera, col, titulo_anios, hasta_col=col + len(datos) - 1)
         for g in grupos:
             if tipo == "meses":
@@ -274,4 +279,89 @@ def respuesta_tnr(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     respuesta["Content-Disposition"] = f'attachment; filename="{indicador.codigo}_{vista}.xlsx"'
+    return respuesta
+
+
+# ---------------------------------------------------------------------------------------
+# Tabla de valores absolutos por encuestador (información indirecta)
+# ---------------------------------------------------------------------------------------
+
+MESES_ABS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "set", "oct", "nov", "dic"]
+RE_ABS_ANIO = re.compile(r"^indirecta(\d{4})$")
+
+
+def anios_absolutos(filas: list[dict]) -> list[int]:
+    return sorted({int(m.group(1)) for f in filas for k in f if (m := RE_ABS_ANIO.match(k))})
+
+
+def libro_absolutos(indicador: IndicadorTnr, filas: list[dict], ambito: str) -> Workbook:
+    """ENCUESTADOR | ACTIVO | por año: Ind. Total, y por mes Ind. Tot. (como la pantalla)."""
+    anios = anios_absolutos(filas)
+    libro = Workbook()
+    hoja = libro.active
+    hoja.title = "VALORES ABSOLUTOS"
+    total_cols = 2 + 26 * len(anios)
+    titulo = f"{indicador.titulo_excel} {ambito or 'NACIONAL'} (Valores absolutos)"
+    hoja.cell(2, 1, titulo).font = Font(name=FUENTE, size=14, bold=True)
+    hoja.merge_cells(start_row=2, start_column=1, end_row=2, end_column=max(total_cols, 2))
+    hoja.cell(2, 1).alignment = CENTRO
+
+    def enc(fila, col, texto, alto=1, ancho=1):
+        if alto > 1 or ancho > 1:
+            hoja.merge_cells(start_row=fila, start_column=col, end_row=fila + alto - 1,
+                             end_column=col + ancho - 1)  # fmt: skip
+        for r in range(fila, fila + alto):
+            for c in range(col, col + ancho):
+                celda = hoja.cell(r, c)
+                celda.fill, celda.border, celda.alignment = AZUL, BORDE, CENTRO
+                celda.font = Font(name=FUENTE, size=9, bold=True, color="FFFFFF")
+        hoja.cell(fila, col, texto)
+
+    enc(3, 1, "ENCUESTADOR", alto=3)
+    enc(3, 2, "ACTIVO", alto=3)
+    claves = []
+    for k, a in enumerate(anios):
+        col = 3 + k * 26
+        enc(3, col, indicador.absolutos.nombre.format(anio=a), ancho=26)
+        enc(4, col, "Ind.", alto=2)
+        enc(4, col + 1, "Total", alto=2)
+        claves += [f"indirecta{a}", f"tot{a}"]
+        for m, nombre in enumerate(MESES_ABS, 1):
+            c = col + 2 * m
+            enc(4, c, MESES_CORTOS[m - 1], ancho=2)
+            enc(5, c, "Ind.")
+            enc(5, c + 1, "Tot.")
+            claves += [f"ind_{nombre}{a}", f"tot{a}_{m}"]
+
+    f = 6
+    for i, fila in enumerate(filas):
+        valores = [_texto(fila.get("nomencue")), _texto(fila.get("activo"))]
+        valores += [_numero(fila.get(c)) for c in claves]
+        for c, valor in enumerate(valores, start=1):
+            celda = hoja.cell(f, c, valor)
+            celda.fill, celda.border = (GRIS if i % 2 else BLANCO), BORDE
+            celda.font = Font(name=FUENTE, size=9)
+            celda.alignment = IZQUIERDA if c == 1 else CENTRO
+        f += 1
+    pie = Font(name=FUENTE, size=8, bold=True)
+    hoja.cell(f, 1, f"FUENTE: SISTEMA MONITOREO ENAHO - {titulo}").font = pie
+    hoja.cell(
+        f + 1, 1, f"FECHA Y HORA: {timezone.localtime().strftime('%d/%m/%Y %H:%M')}"
+    ).font = pie
+    hoja.column_dimensions["A"].width = 32
+    hoja.column_dimensions["B"].width = 9
+    for c in range(3, total_cols + 1):
+        hoja.column_dimensions[get_column_letter(c)].width = 6
+    hoja.freeze_panes = hoja.cell(6, 3)
+    return libro
+
+
+def respuesta_absolutos(indicador: IndicadorTnr, filas: list[dict], ambito: str) -> HttpResponse:
+    contenido = BytesIO()
+    libro_absolutos(indicador, filas, ambito).save(contenido)
+    respuesta = HttpResponse(
+        contenido.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    respuesta["Content-Disposition"] = f'attachment; filename="{indicador.codigo}_absolutos.xlsx"'
     return respuesta

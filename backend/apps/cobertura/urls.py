@@ -20,6 +20,18 @@ rutas_tnr = [
             name=f"{codigo}-mapa",
         ),
         path(
+            f"{codigo}/absolutos/",
+            views.TnrAbsolutosView.as_view(),
+            {"indicador": codigo},
+            name=f"{codigo}-absolutos",
+        ),
+        path(
+            f"{codigo}/absolutos/excel/",
+            views.TnrAbsolutosExcelView.as_view(),
+            {"indicador": codigo},
+            name=f"{codigo}-absolutos-excel",
+        ),
+        path(
             f"{codigo}/<slug:vista>/excel/",
             views.TnrExcelView.as_view(),
             {"indicador": codigo},

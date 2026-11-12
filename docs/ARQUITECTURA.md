@@ -74,9 +74,10 @@ Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
 | GET | `/api/v1/cobertura/indicadores/` | Indicadores de cobertura disponibles |
 | GET | `/api/v1/cobertura/indicadores/{codigo}/` | Datos (`?nivel=&odei=&periodo_inicio=...`, `&formato=xlsx`) |
 | GET | `/api/v1/cobertura/indicadores/{codigo}/mapa/` | Datos para el mapa |
-| GET | `/api/v1/cobertura/{tnr}/` | Pantallas con vistas por departamento / ODEI / ODEI y mes (`tnr-total`, `tnr-parcial`, `problemas-marco`): vistas, textos, gráficos |
+| GET | `/api/v1/cobertura/{tnr}/` | Pantallas con vistas por departamento / ODEI / ODEI y mes (`tnr-total`, `tnr-parcial`, `problemas-marco`, `informacion-indirecta`): vistas, textos, gráficos |
 | GET | `/api/v1/cobertura/{tnr}/{vista}/` | Filas de una vista (`departamentos`, `odei`, `odei-mes`); `sede`, `usuario`, `conglomerado` para bajar de nivel; `&formato=xlsx` |
 | GET | `/api/v1/cobertura/{tnr}/mapa/` | Mapa de calor por departamento |
+| GET | `/api/v1/cobertura/informacion-indirecta/absolutos/` | Valores absolutos por encuestador de una sede (`sede`, `solo_activos`, rango) |
 | GET | `/api/v1/cobertura/tnr-estrato/{anual,mensual,hogar}/` | TNR según estrato (`tipo`, `estrato`, `odei`, `conglomerado`, rango de meses y periodos, `excluir`; hogar: `odei`, `mes`); `&formato=xlsx` |
 
 Documentación completa: `/api/docs/`.
@@ -100,7 +101,7 @@ indicadores de cobertura; solo cambia el código del indicador.
 
 ### Pantallas de tasa de no respuesta (diseño igual al sistema actual)
 
-TNR total, TNR parcial y problemas de marco repiten en el sistema actual ~2.000–2.500
+TNR total, TNR parcial, problemas de marco e información indirecta repiten en el sistema actual ~2.000–2.500
 líneas de JavaScript casi iguales cada una. Aquí comparten todo:
 
 - Backend: `apps/cobertura/tasas_no_respuesta.py` (motor: filtros, alcance por ODEI,

@@ -52,11 +52,7 @@ export const MENU = [
         ],
       },
       { slug: 'problemas-marco', titulo: 'Tasa de problemas de marco', migrada: true },
-      {
-        slug: 'informacion-indirecta',
-        titulo: 'Tasa de información indirecta',
-        indicador: 'informacion-indirecta',
-      },
+      { slug: 'informacion-indirecta', titulo: 'Tasa de información indirecta', migrada: true },
       {
         slug: 'control-visitas',
         titulo: 'Control de visitas (número de visitas y tiempo)',

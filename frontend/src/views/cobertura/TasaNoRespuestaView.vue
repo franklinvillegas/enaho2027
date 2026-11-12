@@ -20,6 +20,7 @@ import apiTnr from '@/api/tasaNoRespuesta'
 import { mensajeError } from '@/api/http'
 import { registrarUso } from '@/api/comun'
 import { useAuthStore } from '@/stores/auth'
+import { aniosAbsolutos, clavesAnio } from '@/composables/tablaAbsolutos'
 import { MESES_CORTOS, aniosConMeses, aniosDe, colorCasilla, esFilaTotal, formatear, idFila,
   modeloColumnas, serieMensual, MESES } from '@/composables/tablaTnr'
 
@@ -102,7 +103,10 @@ const migas = computed(() => {
 // Columnas
 const modelo = computed(() => modeloColumnas(datos.value.columnas,
   { prefijo: info.value.prefijo, colorearUltimo: info.value.colorear_ultimo }))
-const tituloAnios = computed(() => (nivel.value === 4 ? info.value.titulo_detalle : 'AÑOS'))
+const tituloAnios = computed(() => {
+  if (nivel.value === 4) return info.value.titulo_detalle
+  return modelo.value.tipo === 'meses' ? (info.value.titulo_meses ?? 'AÑOS') : 'AÑOS'
+})
 const columnaNombre = computed(() => {
   if (nivel.value === 1) return vista.value === 'departamentos'
     ? { clave: 'nombreMostrar', titulo: 'Dominios de estudio' } : { clave: 'nombreMostrar', titulo: 'ODEI' }
@@ -116,8 +120,12 @@ const soloPresentes = (cols) => cols.filter((c) => presentes.value.has(c.clave))
 // N° | MES | CONGLOMERADO | VIVIENDA | HOGAR | valores
 const columnasExtraIzq = computed(() => (nivel.value === 4
   ? soloPresentes([{ clave: 'mes', titulo: 'MES' }]) : []))
-const columnasTrasNombre = computed(() => (nivel.value === 4
-  ? soloPresentes([{ clave: 'vivienda', titulo: 'VIVIENDA' }, { clave: 'hogar', titulo: 'HOGAR' }]) : []))
+const columnasTrasNombre = computed(() => {
+  if (nivel.value === 4) return soloPresentes([{ clave: 'vivienda', titulo: 'VIVIENDA' }, { clave: 'hogar', titulo: 'HOGAR' }])
+  // Encuestadores de una sede en la vista por mes: columna ACTIVO, como la pantalla actual
+  if (nivel.value === 2 && vista.value === 'odei-mes') return soloPresentes([{ clave: 'activo', titulo: 'ACTIVO' }])
+  return []
+})
 const columnasExtraDer = computed(() => (nivel.value === 3
   ? soloPresentes([{ clave: 'tipEnc', titulo: 'TIPO DE ENCUESTA' }, { clave: 'viv', titulo: 'VIVIENDAS TRABAJADAS' }])
   : []))
@@ -158,8 +166,11 @@ async function consultar() {
   cargando.value = true
   error.value = ''
   try {
+    await infoLista
     const { data } = await api.vista(vista.value, parametros())
     datos.value = data
+    absolutos.value = []
+    if (conAbsolutos.value) absolutos.value = (await api.absolutos(parametros())).data.filas
   } catch (e) {
     error.value = mensajeError(e)
     datos.value = { columnas: [], filas: [] }
@@ -167,6 +178,27 @@ async function consultar() {
     cargando.value = false
   }
 }
+// Valores absolutos por encuestador (solo información indirecta): debajo de la tabla de una
+// sede en la vista por ODEI y mes, como la pantalla actual. Se consulta después de la tabla
+// principal (nunca dos consultas a la vez).
+const absolutos = ref([])
+const conAbsolutos = computed(() => !!info.value.absolutos && vista.value === 'odei-mes' && nivel.value === 2)
+const aniosAbs = computed(() => aniosAbsolutos(absolutos.value))
+async function exportarAbsolutos() {
+  exportando.value = true
+  try {
+    const { data } = await api.excelAbsolutos(absolutos.value, ambito.value)
+    const url = URL.createObjectURL(data)
+    const nombre = `${(g.value.archivo || props.indicador).toUpperCase()}-ABSOLUTOS-${ambito.value.replace(/[^A-Z0-9]+/gi, '-')}.xlsx`
+    Object.assign(document.createElement('a'), { href: url, download: nombre }).click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    error.value = mensajeError(e)
+  } finally {
+    exportando.value = false
+  }
+}
+
 async function exportar() {
   exportando.value = true
   try {
@@ -294,14 +326,12 @@ const observador = new ResizeObserver(() => ajustarAltoTabla())
 onMounted(() => observador.observe(document.body))
 
 // Ciclo de vida
-onMounted(async () => {
-  registrarUso(pantalla, 'ingreso')
-  try {
-    info.value = (await api.info()).data
-  } catch (e) {
-    error.value = mensajeError(e)
-  }
-})
+// La configuración de la pantalla se pide primero: la consulta la necesita para saber,
+// por ejemplo, si hay tabla de valores absolutos
+const infoLista = api.info()
+  .then(({ data }) => { info.value = data })
+  .catch((e) => { error.value = mensajeError(e) })
+onMounted(() => registrarUso(pantalla, 'ingreso'))
 watch([vista, sede, usuario, conglomerado], consultar, { immediate: true })
 watch(pestana, (p) => p === 'mapa' && !datosMapa.value.length && cargarMapa(), { immediate: true })
 const salir = () => registrarUso(pantalla, 'salida')
@@ -318,7 +348,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="tnr">
-    <h5 class="titulo">{{ info.titulo.toUpperCase() }} - {{ ambito }}</h5>
+    <h5 class="titulo">{{ info.titulo_pantalla || info.titulo.toUpperCase() }} - {{ ambito }}</h5>
 
     <div class="d-flex justify-center my-6">
       <div class="grupo-vistas">
@@ -442,6 +472,46 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
       </div>
+
+      <!-- Valores absolutos por encuestador (información indirecta) -->
+      <template v-if="conAbsolutos && absolutos.length">
+        <div class="exportar mt-6">
+          <a :class="{ deshabilitado: exportando }" @click="exportarAbsolutos">
+            <v-icon icon="mdi-microsoft-excel" color="#1D6F42" size="22" /> Exportar Excel
+          </a>
+        </div>
+        <div class="tabla-contenedor absolutos">
+          <table class="tabla-tnr tabla-abs">
+            <thead>
+              <tr>
+                <th rowspan="3" class="fijo c1">ENCUESTADOR</th>
+                <th rowspan="3">ACTIVO</th>
+                <th v-for="a in aniosAbs" :key="a" colspan="26">{{ info.absolutos.replace('{anio}', a) }}</th>
+              </tr>
+              <tr>
+                <template v-for="a in aniosAbs" :key="a">
+                  <th rowspan="2">Ind.</th><th rowspan="2">Total</th>
+                  <th v-for="m in MESES_CORTOS" :key="m" colspan="2">{{ m }}</th>
+                </template>
+              </tr>
+              <tr>
+                <template v-for="a in aniosAbs" :key="a">
+                  <template v-for="m in MESES_CORTOS" :key="m"><th>Ind.</th><th>Tot.</th></template>
+                </template>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(f, i) in absolutos" :key="i" :class="i % 2 ? 'par' : 'impar'">
+                <td class="fijo c1">{{ f.nomencue }}</td>
+                <td class="centro">{{ f.activo }}</td>
+                <template v-for="a in aniosAbs" :key="a">
+                  <td v-for="c in clavesAnio(a)" :key="c" class="centro">{{ f[c] ?? '-' }}</td>
+                </template>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
     </div>
 
     <!-- MAPA DE CALOR -->
@@ -491,6 +561,9 @@ onBeforeUnmount(() => {
 .exportar a.deshabilitado { opacity: 0.5; pointer-events: none; }
 .buscar { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 0.85rem; margin-bottom: 6px; }
 .tabla-contenedor { overflow: auto; border-bottom: 1px solid #333; }
+.tabla-contenedor.absolutos { max-height: 520px; }
+/* Tabla de absolutos: encabezado del color que usa la pantalla actual para esa tabla */
+.tabla-abs th { background: #1565C0; border-color: #ddd; }
 .tabla-tnr { border-collapse: separate; border-spacing: 0; font-size: 0.72rem; min-width: 100%; }
 .tabla-tnr th { background: #0065A9; color: #fff; text-align: center; vertical-align: middle; padding: 10px 8px;
   font-weight: 700; border: 1px solid rgba(255, 255, 255, 0.25); white-space: nowrap; position: sticky; z-index: 2; }

@@ -55,20 +55,11 @@ class Indicador:
 INDICADORES: dict[str, Indicador] = {
     i.codigo: i
     for i in [
-        # TNR total, TNR parcial y problemas de marco tienen su propia pantalla con vistas:
-        # ver tasas_no_respuesta.py y sus configuraciones (tnr_total.py, tnr_parcial.py,
-        # problemas_marco.py).
+        # TNR total, TNR parcial, problemas de marco e información indirecta tienen su
+        # propia pantalla con vistas: ver tasas_no_respuesta.py y sus configuraciones.
         # Los siguientes indicadores tienen por ahora solo el nivel departamento.
         # Los niveles ODEI y conglomerado se agregan cuando se confirme el orden
         # de parámetros con el código de cada procedimiento.
-        Indicador(
-            codigo="informacion-indirecta",
-            nombre="Tasa de información indirecta",
-            niveles={
-                Nivel.DEPARTAMENTO: Consulta("cobertura_tasaInformacionIndirecta_dep", _rango)
-            },
-            mapa=Consulta("enaho2015_inf_indirecta_map"),
-        ),
         Indicador(
             codigo="control-visitas",
             nombre="Control de visitas",

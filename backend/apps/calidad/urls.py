@@ -1,11 +1,17 @@
 """Indicadores de calidad.
 
 Vivienda y hogar, demográficos, consumo de alimentos, programas sociales, educación, salud
-y empleo.
-
-Pendiente: se migra después del piloto de cobertura, siguiendo la misma estructura
-(indicadores.py / repositorios.py / servicios.py / views.py).
-Ver docs/ y el catálogo de pantallas del documento de reingeniería.
+y empleo. Migradas: vivienda y hogar, programas sociales (ver indicadores.py).
 """
 
-urlpatterns = []
+from django.urls import path
+
+from .views import ReporteCalidadView
+
+urlpatterns = [
+    path(
+        "reportes/<slug:pantalla>/<slug:vista>/",
+        ReporteCalidadView.as_view(),
+        name="calidad-reporte",
+    ),
+]

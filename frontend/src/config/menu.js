@@ -64,10 +64,10 @@ export const MENU = [
     titulo: 'Indicadores de calidad',
     icono: 'mdi-check-decagram-outline',
     pantallas: [
-      { slug: 'vivienda-hogar', titulo: 'Vivienda y hogar' },
+      { slug: 'vivienda-hogar', titulo: 'Vivienda y hogar', migrada: true },
       { slug: 'demograficos', titulo: 'Demográficos' },
       { slug: 'consumo-alimentos', titulo: 'Consumo de alimentos' },
-      { slug: 'programas-sociales', titulo: 'Programas sociales' },
+      { slug: 'programas-sociales', titulo: 'Programas sociales', migrada: true },
       { slug: 'educacion', titulo: 'Educación' },
       { slug: 'salud', titulo: 'Salud' },
       { slug: 'empleo', titulo: 'Empleo y otros' },

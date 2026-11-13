@@ -1,8 +1,10 @@
 <script setup>
-// Pantallas de cobertura con estructura propia: control de visitas, omisión por capítulos,
-// omisiones GPS y tipo de entrevista. Mismo diseño que las pantallas actuales; lo que cambia
-// entre una y otra (vistas, pestañas, filtros, columnas, gráficos) está en su configuración
-// (config/reportesCobertura/*.js). Aquí va lo común:
+// Vista genérica de reportes con el diseño de las pantallas actuales:
+//  - cobertura: control de visitas, omisión por capítulos, omisiones GPS, tipo de entrevista
+//  - calidad: indicadores de vivienda y hogar, programas sociales, ...
+// Lo que cambia entre una pantalla y otra (indicadores, vistas, pestañas, filtros, columnas,
+// gráficos) está en su configuración (config/reportesCobertura/*.js, config/reportesCalidad/*.js).
+// Aquí va lo común:
 //  - estado en la dirección (vista, pestaña y nivel): funciona "Atrás" y se puede compartir
 //  - una consulta a la vez, sin repetir la misma; ventana de espera mientras carga
 //  - Excel .xlsx de la tabla que ya está en pantalla (no vuelve a consultar la base)
@@ -20,17 +22,22 @@ import { catalogos, registrarUso } from '@/api/comun'
 import { useAuthStore } from '@/stores/auth'
 import { opcionesMapaCalor, registrarMapaPeru } from '@/composables/mapaPeru'
 import TablaReporte from '@/components/reportes/TablaReporte.vue'
-import { CONFIGURACIONES } from '@/config/reportesCobertura'
+import { CONFIGURACIONES as COBERTURA } from '@/config/reportesCobertura'
+import { CONFIGURACIONES as CALIDAD } from '@/config/reportesCalidad'
 
 use([BarChart, LineChart, MapChart, GridComponent, LegendComponent, TitleComponent, TooltipComponent,
   ToolboxComponent, VisualMapComponent, CanvasRenderer])
 
-const props = defineProps({ pantalla: { type: String, required: true }, titulo: { type: String, default: '' } })
-const cfg = CONFIGURACIONES[props.pantalla]
+const props = defineProps({
+  modulo: { type: String, default: 'cobertura' },
+  pantalla: { type: String, required: true },
+  titulo: { type: String, default: '' },
+})
+const cfg = { cobertura: COBERTURA, calidad: CALIDAD }[props.modulo][props.pantalla]
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
-const PANTALLA = `cobertura/${props.pantalla}`
+const PANTALLA = `${props.modulo}/${props.pantalla}`
 
 // ---- Filtros ----------------------------------------------------------------------------
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Setiembre',
@@ -48,15 +55,29 @@ const opcionesOdei = computed(() => (odeiUsuario.value
 
 // ---- Estado en la dirección ----------------------------------------------------------------
 const q = computed(() => route.query)
-const vista = computed(() => q.value.vista || cfg.vistas?.[0]?.codigo || '')
-const pestana = computed(() => q.value.pestana || cfg.pestanas(ctx.value)[0].codigo)
+// Indicador elegido en el combo (pantallas de calidad)
+const indicador = computed(() => {
+  const lista = cfg.indicadores ?? []
+  return lista.some((i) => String(i.v) === q.value.indicador) ? Number(q.value.indicador) : lista[0]?.v ?? null
+})
+const vistasDe = (c) => (typeof cfg.vistas === 'function' ? cfg.vistas(c) : cfg.vistas) ?? []
+// Si la vista elegida no existe para este indicador (p. ej. "Visualizar casos"), la primera
+const vista = computed(() => {
+  const lista = vistasDe({ indicador: indicador.value })
+  return lista.some((v) => v.codigo === q.value.vista) ? q.value.vista : lista[0]?.codigo || ''
+})
+const pestana = computed(() => {
+  const lista = cfg.pestanas(ctx.value)
+  return lista.some((p) => p.codigo === q.value.pestana) ? q.value.pestana : lista[0].codigo
+})
 const ctx = computed(() => {
   const sede = q.value.sede || '0'
   const usuario = q.value.usuario || '0'
   const conglomerado = q.value.conglomerado || '0'
   const nivel = 1 + (sede !== '0') + (usuario !== '0') + (conglomerado !== '0')
   return {
-    vista: q.value.vista || cfg.vistas?.[0]?.codigo || '', pestana: q.value.pestana, nivel,
+    vista: vista.value, pestana: q.value.pestana, nivel, indicador: indicador.value,
+    nombreIndicador: cfg.indicadores?.find((i) => i.v === indicador.value)?.t ?? '',
     sede, nombreSede: q.value.nombreSede || '', usuario, encuestador: q.value.encuestador || '',
     conglomerado, filtros: aplicados.value, anio: new Date().getFullYear(),
     odeiPermitida: (c) => !odeiUsuario.value || odeiUsuario.value === Number.parseInt(c, 10),
@@ -70,6 +91,16 @@ function ir(cambios, reemplazar = false) {
 const cambiarVista = (v) => ir({ vista: v, sede: null, nombreSede: null, usuario: null, encuestador: null,
   conglomerado: null }, true)
 const cambiarPestana = (p) => ir({ pestana: p }, true)
+function cambiarIndicador(i) {
+  // Si el nuevo indicador no tiene la vista actual ("Visualizar casos"), pasa a ODEI y por mes
+  const lista = vistasDe({ indicador: Number(i) })
+  const cambios = { indicador: String(i) }
+  if (!lista.some((v) => v.codigo === vista.value)) {
+    Object.assign(cambios, { vista: (lista.find((v) => v.codigo === 'odei-mes') ?? lista[0])?.codigo,
+      sede: null, nombreSede: null, usuario: null, encuestador: null, conglomerado: null })
+  }
+  ir(cambios, true)
+}
 const migas = computed(() => {
   const c = ctx.value
   const m = [{ texto: 'NACIONAL', ir: c.nivel > 1 ? { sede: null, nombreSede: null, usuario: null, encuestador: null, conglomerado: null } : null }]
@@ -96,7 +127,7 @@ async function cargar() {
   cargando.value = true
   error.value = ''
   try {
-    const { data } = await api.tabla(props.pantalla, c.vista, c.params)
+    const { data } = await api.tabla(props.modulo, props.pantalla, c.vista, c.params)
     if (clave === ultimaClave) filas.value = data.filas
   } catch (e) {
     error.value = mensajeError(e)
@@ -112,7 +143,7 @@ async function cargarMapa() {
   cargandoMapa.value = true
   try {
     await registrarMapaPeru()
-    filasMapa.value = (await api.tabla(props.pantalla, cfg.mapa.vista, {})).data.filas
+    filasMapa.value = (await api.tabla(props.modulo, props.pantalla, cfg.mapa.vista, {})).data.filas
   } catch (e) {
     error.value = mensajeError(e)
   } finally {
@@ -138,6 +169,7 @@ const opcionesMapa = computed(() => opcionesMapaCalor(filasMapa.value, cfg.mapa?
 const filtrosVisibles = computed(() => cfg.filtros({ ...ctx.value, pestana: pestana.value }))
 const ve = (nombre) => filtrosVisibles.value.includes(nombre)
 const titulo = computed(() => cfg.titulo({ ...ctx.value, pestana: pestana.value }))
+const textos = computed(() => (typeof cfg.textos === 'function' ? cfg.textos(ctx.value) : cfg.textos) ?? [])
 const esTabla = computed(() => !['grafico', 'mapa'].includes(pestana.value))
 const busqueda = ref('')
 const cerrados = ref(new Set(cfg.gruposCerrados ?? []))
@@ -168,7 +200,7 @@ async function exportar() {
     const visible = (c) => !c.grupo || !cerrados.value.has(c.grupo)
     const m = modelo.value
     const tabla = {
-      titulo: titulo.value,
+      titulo: cfg.tituloExcel ? cfg.tituloExcel({ ...ctx.value, pestana: pestana.value }) : titulo.value,
       nombre_archivo: (cfg.archivo ?? props.pantalla).replace(/[^\w\- ]/g, '-'),
       color: (cfg.colorEncabezado ?? '#0065A9').replace('#', ''),
       encabezados: m.encabezados.map((f) => f.filter(visible).map((c) => ({ texto: String(c.texto).replace(/\n/g, ' '),
@@ -243,8 +275,15 @@ onBeforeUnmount(() => {
   <div class="reporte">
     <h5 class="titulo">{{ titulo }}</h5>
 
-    <div v-if="cfg.vistas?.length" class="vistas">
-      <button v-for="v in cfg.vistas" :key="v.codigo" :class="['btn-vista', { activo: vista === v.codigo }]"
+    <div v-if="cfg.indicadores?.length" class="indicador">
+      <label for="cmb-indicador">INDICADORES:</label>
+      <select id="cmb-indicador" :value="indicador" @change="cambiarIndicador($event.target.value)">
+        <option v-for="i in cfg.indicadores" :key="i.v" :value="i.v">{{ i.t }}</option>
+      </select>
+    </div>
+
+    <div v-if="vistasDe(ctx).length" class="vistas">
+      <button v-for="v in vistasDe(ctx)" :key="v.codigo" :class="['btn-vista', { activo: vista === v.codigo }]"
         @click="cambiarVista(v.codigo)">{{ v.nombre }}</button>
     </div>
 
@@ -293,7 +332,15 @@ onBeforeUnmount(() => {
           <v-chart :option="g.opcion" autoresize :style="{ height: `${g.alto ?? 420}px` }" />
         </div>
       </div>
-      <div v-for="(t, k) in cfg.textos ?? []" :key="k" class="texto-indicador">
+      <!-- Objetivo y fórmula en cuadro (indicadores de calidad) -->
+      <table v-if="cfg.textosEnCuadro && textos.length" class="cuadro-formula">
+        <thead><tr><th>CATEGORÍA</th><th>DESCRIPCIÓN</th></tr></thead>
+        <tbody v-for="(t, k) in textos" :key="k">
+          <tr v-if="t.descripcion"><th>OBJETIVO</th><td>{{ t.descripcion }}</td></tr>
+          <tr v-if="t.formula"><th>FÓRMULA</th><td>{{ t.formula }}</td></tr>
+        </tbody>
+      </table>
+      <div v-for="(t, k) in cfg.textosEnCuadro ? [] : textos" :key="k" class="texto-indicador">
         <p v-if="t.descripcion"><b>Descripción:</b>&nbsp; {{ t.descripcion }}</p>
         <p v-if="t.formula"><b>Fórmulas:</b>&nbsp; {{ t.formula }}</p>
       </div>
@@ -336,6 +383,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .reporte { font-family: Roboto, sans-serif; color: #333; }
 .titulo { text-align: center; font-size: 1rem; font-weight: 700; padding-bottom: 6px; border-bottom: 1px solid #333; margin: 12px 0 0; }
+.indicador { display: flex; justify-content: center; align-items: center; gap: 12px; margin: 22px 0 0; font-size: 0.85rem; }
+.indicador select { width: min(620px, 100%); height: 32px; border: 1px solid #333; border-radius: 2px; padding: 0 10px;
+  font-size: 0.82rem; background: #fff; appearance: auto; }
+.cuadro-formula { margin: 18px auto 0; max-width: 760px; border-collapse: collapse; border: 3px solid #4C81C9; font-size: 0.85rem; }
+.cuadro-formula th, .cuadro-formula td { border: 1px solid #ddd; padding: 8px 12px; }
+.cuadro-formula thead th { background: #0065A9; color: #fff; text-align: center; }
+.cuadro-formula td { text-align: center; }
 .vistas { display: flex; justify-content: center; flex-wrap: wrap; margin: 24px 0 18px; }
 .btn-vista { border: 1px solid #1E88E5; color: #1E88E5; background: #fff; padding: 7px 14px; font-size: 0.9rem; cursor: pointer; }
 .btn-vista + .btn-vista { border-left: none; }

@@ -79,6 +79,7 @@ Para cambiar la fuente de datos de un módulo se cambia una variable del `.env`
 | GET | `/api/v1/cobertura/{tnr}/mapa/` | Mapa de calor por departamento |
 | GET | `/api/v1/cobertura/informacion-indirecta/absolutos/` | Valores absolutos por encuestador de una sede (`sede`, `solo_activos`, rango) |
 | GET | `/api/v1/cobertura/reportes/{pantalla}/{vista}/` | Control de visitas, omisión por capítulos, omisiones GPS y tipo de entrevista (ver abajo) |
+| GET | `/api/v1/calidad/reportes/{pantalla}/{vista}/?indicador=` | Indicadores de calidad (ver abajo) |
 | POST | `/api/v1/excel/` | Excel de la tabla que la pantalla ya muestra (sin volver a consultar la base) |
 | GET | `/api/v1/cobertura/tnr-estrato/{anual,mensual,hogar}/` | TNR según estrato (`tipo`, `estrato`, `odei`, `conglomerado`, rango de meses y periodos, `excluir`; hogar: `odei`, `mes`); `&formato=xlsx` |
 
@@ -142,7 +143,7 @@ capítulos × años, meses × capítulos...). Comparten:
 - Excel genérico: `apps/comun/excel_tabla.py` (`POST /api/v1/excel/`). La pantalla envía la
   tabla tal como la dibuja (encabezados con celdas combinadas, filas, celdas en rojo) y el
   backend solo arma el .xlsx con el diseño del reporte. Sirve para cualquier pantalla futura.
-- Frontend: una vista genérica `views/cobertura/ReporteCoberturaView.vue` + la tabla
+- Frontend: una vista genérica `views/reportes/ReporteView.vue` + la tabla
   `components/reportes/TablaReporte.vue`. Lo propio de cada pantalla está en
   `config/reportesCobertura/<pantalla>.js`: vistas, pestañas, filtros, qué consultar,
   cómo se arma la tabla (`tabla(filas, ctx)`), gráficos y textos. Los años y meses salen
@@ -155,6 +156,31 @@ Mejoras respecto al sistema actual:
   aquí la llamada va completa, y cada vivienda con GPS tiene el enlace "Ver mapa".
 - Una consulta a la vez y sin repetir la misma; ventana de espera que bloquea la pantalla.
 - El Excel exporta exactamente lo que se ve (con los grupos abiertos o cerrados).
+
+### Indicadores de calidad
+
+En el sistema actual las siete pantallas de calidad (vivienda y hogar, demográficos,
+consumo de alimentos, programas sociales, educación, salud, empleo) repiten ~2.500–7.600
+líneas de JavaScript cada una, y casi todos sus indicadores usan el mismo esquema de
+procedimientos: `enaho2017_calidad_{indicador}{tipo}` (tipo 1 departamentos, 2 ODEI, 3 ODEI y
+por mes).
+
+- Backend `apps/calidad/`: `indicadores.py` declara qué indicadores tiene cada pantalla
+  (lista cerrada: el nombre del procedimiento nunca se arma con un valor sin validar) y
+  registra los procedimientos en la lista blanca; `servicios.py` arma los parámetros en el
+  orden y formato de la pantalla actual (encuestador "" = todos, mes "0" = sin filtro) y
+  tiene los datos de demostración. Ruta única `/calidad/reportes/{pantalla}/{vista}/?indicador=`.
+- Frontend: la misma vista genérica de reportes, con el combo de indicadores. Lo común de
+  las pantallas de calidad está en `config/reportesCalidad/indicadorCalidad.js` (tablas por
+  año y por mes, gráfico de barras o líneas, cuadro de objetivo y fórmula); cada pantalla
+  solo lista sus indicadores con sus textos (`viviendaHogar.js`, `programasSociales.js`).
+- "Visualizar casos" (balance del hogar, indicadores 11 y 12 de vivienda y hogar) llama a
+  `calidad_viviendaHogar_detalleBalanceHogar`.
+
+Migradas: vivienda y hogar, programas sociales. Pendientes: demográficos (pirámide de
+edad), consumo de alimentos (precios IPC, kilos, canasta), educación (tasa de asistencia
+escolar por dominio), salud (razones de no asistencia) y empleo (PET, ninis, etnicidad):
+usan el mismo esquema más algunos indicadores con procedimiento propio.
 
 ## Cómo migrar una pantalla nueva
 

@@ -6,7 +6,7 @@ import AppLayout from '@/layouts/AppLayout.vue'
 import LoginView from '@/views/LoginView.vue'
 import InicioView from '@/views/InicioView.vue'
 
-const ReporteCobertura = () => import('@/views/cobertura/ReporteCoberturaView.vue')
+const Reporte = () => import('@/views/reportes/ReporteView.vue')
 const IndicadorCobertura = () => import('@/views/cobertura/IndicadorCoberturaView.vue')
 const TasaNoRespuesta = () => import('@/views/cobertura/TasaNoRespuestaView.vue')
 
@@ -20,8 +20,11 @@ const VISTAS_PROPIAS = {
   // TNR según estrato tiene otra estructura (cuatro pestañas): vista propia
   'cobertura/tnr-estrato': { component: () => import('@/views/cobertura/TnrEstratoView.vue') },
   // Reportes con tablas agrupadas: una vista genérica guiada por config/reportesCobertura
+  // y config/reportesCalidad
   ...Object.fromEntries(['control-visitas', 'omision-capitulos', 'omisiones-gps', 'tipo-entrevista'].map((p) => [
-    `cobertura/${p}`, { component: ReporteCobertura, props: { pantalla: p } }])),
+    `cobertura/${p}`, { component: Reporte, props: { modulo: 'cobertura', pantalla: p } }])),
+  ...Object.fromEntries(['vivienda-hogar', 'programas-sociales'].map((p) => [
+    `calidad/${p}`, { component: Reporte, props: { modulo: 'calidad', pantalla: p } }])),
 }
 const EnConstruccion = () => import('@/views/EnConstruccionView.vue')
 

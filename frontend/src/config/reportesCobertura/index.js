@@ -1,4 +1,4 @@
-// Configuración de cada reporte de cobertura que usa la pantalla genérica ReporteCoberturaView.
+// Configuración de cada reporte de cobertura que usa la vista genérica views/reportes/ReporteView.vue.
 import controlVisitas from './controlVisitas'
 import omisionCapitulos from './omisionCapitulos'
 import omisionesGps from './omisionesGps'

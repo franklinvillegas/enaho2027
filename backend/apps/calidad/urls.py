@@ -1,7 +1,7 @@
 """Indicadores de calidad.
 
 Vivienda y hogar, demográficos, consumo de alimentos, programas sociales, educación, salud
-y empleo. Migradas: vivienda y hogar, programas sociales (ver indicadores.py).
+y empleo. Todas siguen el mismo esquema (ver indicadores.py).
 """
 
 from django.urls import path

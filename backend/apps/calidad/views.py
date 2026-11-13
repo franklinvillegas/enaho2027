@@ -12,7 +12,8 @@ from .indicadores import obtener
 class ReporteCalidadView(APIView):
     """Filas de un indicador de calidad en una vista.
 
-    Vistas: departamentos · odei · odei-mes · casos (solo los indicadores que lo tienen).
+    Vistas: departamentos · odei · odei-mes, y las propias de algunos indicadores (casos,
+    piramide, precios, trimestral, pet...; ver indicadores.py).
     Ejemplo: /api/v1/calidad/reportes/vivienda-hogar/odei-mes/?indicador=4&sede=14
     """
 
@@ -27,6 +28,8 @@ class ReporteCalidadView(APIView):
         s = servicios.FiltrosCalidadSerializer(data=request.query_params)
         s.is_valid(raise_exception=True)
         f = dict(s.validated_data)
+        # Combo de encuestadores (PET): el procedimiento recibe el usuario que consulta
+        f["_usuario"] = request.user.get_username()
         obtener(pantalla, vista, f["indicador"])
         servicios.verificar_alcance(f, request.user)
         return Response({"filas": servicios.consultar(pantalla, vista, f)})

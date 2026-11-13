@@ -1,10 +1,11 @@
 // Indicadores de seguimiento a programas sociales — seguimientoProgramasSociales.js del sistema actual.
-import { pantallaCalidad } from './indicadorCalidad'
+import { EXCLUSIONES_SEGUIMIENTO, pantallaCalidad } from './indicadorCalidad'
 
 export default pantallaCalidad({
   pantalla: 'programas-sociales',
   titulo: 'INDICADORES DE SEGUIMIENTO A PROGRAMAS SOCIALES',
   archivo: 'INDICADORES-PROGRAMAS-SOCIALES',
+  exclusiones: EXCLUSIONES_SEGUIMIENTO,
   indicadores: [
     { v: 24, t: '1. Porcentaje de hogares que han recibido ayuda alimentaria de algún programa social.', unidad: '%',
       descripcion: 'Permite conocer el número de hogares que recibió por parte del estado ayuda alimentaria de algún programa social.',

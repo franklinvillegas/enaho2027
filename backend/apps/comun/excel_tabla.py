@@ -41,21 +41,40 @@ class FilaSerializer(serializers.Serializer):
     resaltadas = serializers.ListField(child=serializers.IntegerField(min_value=0), default=list)
 
 
+def _encabezados():
+    return serializers.ListField(
+        child=serializers.ListField(child=CeldaEncabezadoSerializer(), max_length=1000),
+        max_length=10,
+        default=list,
+    )
+
+
+class SeccionSerializer(serializers.Serializer):
+    """Una de varias tablas de la misma pantalla (p. ej. las cuatro de situación laboral)."""
+
+    titulo = serializers.CharField(max_length=300, allow_blank=True, default="")
+    encabezados = _encabezados()
+    filas = serializers.ListField(child=FilaSerializer(), max_length=50_000)
+
+
 class TablaExcelSerializer(serializers.Serializer):
     titulo = serializers.CharField(max_length=300)
     nombre_archivo = serializers.RegexField(r"^[\w\- ]{1,120}$", default="reporte")
     color = serializers.RegexField(r"^[0-9A-Fa-f]{6}$", default="0065A9")
-    encabezados = serializers.ListField(
-        child=serializers.ListField(child=CeldaEncabezadoSerializer(), max_length=1000),
-        max_length=10,
-    )
-    filas = serializers.ListField(child=FilaSerializer(), max_length=50_000)
+    encabezados = _encabezados()
+    filas = serializers.ListField(child=FilaSerializer(), max_length=50_000, default=list)
+    # En lugar de encabezados y filas: varias tablas, una debajo de otra
+    secciones = serializers.ListField(child=SeccionSerializer(), max_length=10, default=list)
     pie = serializers.ListField(
         child=serializers.CharField(max_length=500, allow_blank=True), max_length=5, default=list
     )
 
     def validate(self, datos):
-        celdas = sum(len(f["celdas"]) for f in datos["filas"])
+        if not datos["secciones"]:
+            datos["secciones"] = [
+                {"titulo": "", "encabezados": datos["encabezados"], "filas": datos["filas"]}
+            ]
+        celdas = sum(len(f["celdas"]) for sec in datos["secciones"] for f in sec["filas"])
         if celdas > MAX_CELDAS:
             raise serializers.ValidationError("La tabla es demasiado grande para exportar.")
         return datos
@@ -81,31 +100,13 @@ def _valor(texto: str):
     return int(n) if n.is_integer() and "." not in t else n
 
 
-def libro(datos: dict) -> Workbook:
-    color = PatternFill("solid", fgColor=datos["color"].upper())
-    amarillo = PatternFill("solid", fgColor="F5FFBE")
-    gris = PatternFill("solid", fgColor="EAEAEA")
-    blanco = PatternFill("solid", fgColor="FFFFFF")
+def _encabezados_hoja(hoja, encabezados: list, inicio: int, color) -> int:
+    """Encabezados con celdas combinadas (respetando las que bajan desde filas anteriores).
 
-    wb = Workbook()
-    hoja = wb.active
-    hoja.title = "REPORTE"
-
-    # Ancho total: el de la fila de encabezado más larga o de los datos
-    ancho = max(
-        [sum(c["columnas"] for c in fila) for fila in datos["encabezados"]]
-        + [len(f["celdas"]) for f in datos["filas"]]
-        + [1]
-    )
-    hoja.cell(2, 1, _texto(datos["titulo"])).font = Font(name=FUENTE, size=14, bold=True)
-    hoja.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ancho)
-    hoja.cell(2, 1).alignment = CENTRO
-    hoja.row_dimensions[2].height = 24
-
-    # Encabezados con celdas combinadas (respetando las que bajan desde filas anteriores)
-    inicio = 3
+    Devuelve la fila donde empiezan los datos.
+    """
     ocupadas: set[tuple[int, int]] = set()
-    for i, fila in enumerate(datos["encabezados"]):
+    for i, fila in enumerate(encabezados):
         r = inicio + i
         c = 1
         for celda in fila:
@@ -123,19 +124,52 @@ def libro(datos: dict) -> Workbook:
                                  end_column=c + cols - 1)  # fmt: skip
             hoja.cell(r, c, _texto(celda["texto"]))
             c += cols
+    return inicio + len(encabezados)
 
-    r = inicio + len(datos["encabezados"])
-    primera_datos = r
-    for i, fila in enumerate(datos["filas"]):
-        relleno = amarillo if fila["total"] else (gris if i % 2 else blanco)
-        for c, texto in enumerate(fila["celdas"], start=1):
-            x = hoja.cell(r, c, _valor(texto))
-            x.fill, x.border = relleno, BORDE
-            rojo = (c - 1) in fila["resaltadas"]
-            x.font = Font(name=FUENTE, size=9, bold=fila["total"] or rojo,
-                          color="FF2400" if rojo else "000000")  # fmt: skip
-            x.alignment = IZQUIERDA if isinstance(x.value, str) and len(x.value) > 12 else CENTRO
-        r += 1
+
+def libro(datos: dict) -> Workbook:
+    color = PatternFill("solid", fgColor=datos["color"].upper())
+    amarillo = PatternFill("solid", fgColor="F5FFBE")
+    gris = PatternFill("solid", fgColor="EAEAEA")
+    blanco = PatternFill("solid", fgColor="FFFFFF")
+
+    wb = Workbook()
+    hoja = wb.active
+    hoja.title = "REPORTE"
+
+    # Ancho total: el de la fila de encabezado más larga o de los datos
+    ancho = max(
+        [sum(c["columnas"] for c in fila)
+         for sec in datos["secciones"] for fila in sec["encabezados"]]
+        + [len(f["celdas"]) for sec in datos["secciones"] for f in sec["filas"]]
+        + [1]
+    )  # fmt: skip
+    hoja.cell(2, 1, _texto(datos["titulo"])).font = Font(name=FUENTE, size=14, bold=True)
+    hoja.merge_cells(start_row=2, start_column=1, end_row=2, end_column=ancho)
+    hoja.cell(2, 1).alignment = CENTRO
+    hoja.row_dimensions[2].height = 24
+
+    r = 3
+    primera_datos = None
+    for sec in datos["secciones"]:
+        if sec["titulo"]:
+            hoja.cell(r, 1, _texto(sec["titulo"])).font = Font(name=FUENTE, size=11, bold=True)
+            r += 1
+        r = _encabezados_hoja(hoja, sec["encabezados"], r, color)
+        primera_datos = primera_datos or r
+        for i, fila in enumerate(sec["filas"]):
+            relleno = amarillo if fila["total"] else (gris if i % 2 else blanco)
+            for c, texto in enumerate(fila["celdas"], start=1):
+                x = hoja.cell(r, c, _valor(texto))
+                x.fill, x.border = relleno, BORDE
+                rojo = (c - 1) in fila["resaltadas"]
+                x.font = Font(name=FUENTE, size=9, bold=fila["total"] or rojo,
+                              color="FF2400" if rojo else "000000")  # fmt: skip
+                x.alignment = (
+                    IZQUIERDA if isinstance(x.value, str) and len(x.value) > 12 else CENTRO
+                )
+            r += 1
+        r += 1 if len(datos["secciones"]) > 1 else 0
 
     pie = Font(name=FUENTE, size=8, bold=True)
     hoja.cell(r, 1, "FUENTE: SISTEMA MONITOREO ENAHO").font = pie
@@ -156,7 +190,8 @@ def libro(datos: dict) -> Workbook:
             default=6,
         )
         hoja.column_dimensions[get_column_letter(c)].width = min(max(largo + 2, 7), 40)
-    hoja.freeze_panes = hoja.cell(primera_datos, 3 if ancho > 3 else 1)
+    if len(datos["secciones"]) == 1:
+        hoja.freeze_panes = hoja.cell(primera_datos, 3 if ancho > 3 else 1)
     hoja.page_setup.orientation = "landscape"
     hoja.page_setup.fitToWidth = 1
     hoja.page_setup.fitToHeight = 0

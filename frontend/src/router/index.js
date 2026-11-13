@@ -23,7 +23,8 @@ const VISTAS_PROPIAS = {
   // y config/reportesCalidad
   ...Object.fromEntries(['control-visitas', 'omision-capitulos', 'omisiones-gps', 'tipo-entrevista'].map((p) => [
     `cobertura/${p}`, { component: Reporte, props: { modulo: 'cobertura', pantalla: p } }])),
-  ...Object.fromEntries(['vivienda-hogar', 'programas-sociales'].map((p) => [
+  ...Object.fromEntries(['vivienda-hogar', 'demograficos', 'consumo-alimentos', 'programas-sociales', 'educacion',
+    'salud', 'empleo'].map((p) => [
     `calidad/${p}`, { component: Reporte, props: { modulo: 'calidad', pantalla: p } }])),
 }
 const EnConstruccion = () => import('@/views/EnConstruccionView.vue')

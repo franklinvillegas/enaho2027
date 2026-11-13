@@ -1,0 +1,42 @@
+// Indicadores de seguimiento a educación — seguimientoEducacion.js del sistema actual.
+import { asistenciaEscolar } from './especiales'
+import { pantallaCalidad } from './indicadorCalidad'
+
+export default pantallaCalidad({
+  pantalla: 'educacion',
+  titulo: 'INDICADORES DE SEGUIMIENTO A EDUCACIÓN',
+  archivo: 'INDICADORES-EDUCACION',
+  indicadores: [
+    { v: 14, t: '1. Tasa de analfabetismo.', unidad: '',
+      descripcion: 'Se busca conocer el número de personas analfabetas (que no sabe leer ni escribir) de la muestra para el período investigado, es decir, por cada 100 personas de esa misma edad cuantos tienen esta condición.',
+      formula: ' (P208A >= 15 & P302 = 2) / (P208A >= 15 & P302 = 1:2) * 100' },
+    { v: 50, t: '2. Tasa de matrícula escolar.', unidad: '',
+      descripcion: 'Se busca conocer la tasa de matrícula escolar de la muestra para el período investigado, es decir, por cada 100 personas de esa misma edad cuantos tienen esta condición.',
+      formula: 'Total estudiantes de 3 a 16 años (P208A > 2 y < 17) y P306=1 / Total casos (P208A > 2 y < 17) y residentes * 100' },
+    { v: 91, t: '3. Tasa de asistencia escolar.', unidad: '', especial: asistenciaEscolar,
+      exclusiones: asistenciaEscolar.exclusiones,
+      descripcion: 'Se busca conocer la tasa de asistencia escolar de la muestra para el período investigado, es decir, por cada 100 personas de esa misma edad cuantos tienen esta condición.',
+      formula: ' Total estudiantes de 3 a 16 años (P208A > 2 y < 17) y P307=1 / Total casos (P208A > 2 y < 17) y residentes * 100.' },
+    { v: 51, t: '4. Tasa de no asistencia a un centro o programa de educación básica o superior de 3 a 24 años.', unidad: '',
+      descripcion: 'Conocer la tasa de NO asistencia a un centro o programa de educación básica o superior, de la población (de 3 a 24 años) que no está matriculada o no asiste actualmente a un centro educativo.',
+      formula: 'Total personas de 3 a 24 años (P208A >= 3 y < 24) y P313A= (1 o 2 o 3 … 11) / Total casos (P208A >= 3 y < 24) y residentes * 100' },
+    { v: 52, t: '5. Porcentaje de la población mayor de 14 años que usa equipos de cómputo (Laptop, Tablet o similares).', unidad: '',
+      descripcion: 'Conocer el acceso de la población de 14 años y más de edad a los equipos de cómputo (Laptop, Tablet o similares), que les permita adquirir competencias de tecnologías de la información y comunicación (TIC).',
+      formula: 'Total de personas mayores de 14 años y más edad (P208A >= 14 y P316B= 1) / Total casos (P208A >= 14) y residentes * 100' },
+    { v: 53, t: '6. Porcentaje de la población mayor de 6 años que usa internet.', unidad: '',
+      descripcion: 'Conocer el acceso al servicio de Internet de la población de 6 años y más de edad. El uso de Internet puede estar referido a: educación, transacciones financieras, comunicaciones, cultura, diversión, entretenimiento, compra de productos y servicios, chat, etc.',
+      formula: 'Total de personas mayores de 6 años y más edad (P208A >= 6 y P314A= 1) / Total casos (P208A >= 6) y residentes * 100' },
+    { v: 54, t: '7. Porcentaje de la población que usa celular.', unidad: '',
+      descripcion: 'Se busca conocer a la población de 6 años y más edad que hicieron uso del teléfono celular en el periodo de referencia y determinar la tenencia del mismo.',
+      formula: 'Total de personas mayores de 6 años y más edad (P208A > 6 y P316a= (1 o 2 o 3 o 4 o 6)) / Total casos (P208A > 6) y residentes * 100' },
+    { v: 55, t: '8. Porcentaje de la población de 3 años y más edad, que recibió enseñanza en algún centro o programa de estudios cuya duración sea menor a 3 años (Cetpro, academia u otros).', unidad: '',
+      descripcion: 'Conocer a la población que recibió enseñanza en algún programa de estudios cuya duración sea menor a 3 años. Estos cursos o programas de estudio se dictan en programas de extensión universitaria, academias, Centros de Educación Técnico Productiva (CETPRO´S), seminarios u otros.',
+      formula: 'Total de personas de 3 a más años (P208A >= 3) y P310A = 1 / Total casos (P208A >= 3) y residentes * 100' },
+    { v: 9, t: '9. Porcentaje de estudiantes en primaria, mayores de 12 años.', unidad: '%',
+      descripcion: 'Busca identificar el atraso escolar en este nivel, es decir el porcentaje de estudiantes mayores de 12 años en el nivel primario. Ademas este indicador no se debe encontrar fuera de los rangos permisibles.',
+      formula: 'Total estud.primaria P208A > 12 & (P308A=2) / Total casos con respuesta (P308A=2) & residentes  * 100' },
+    { v: 10, t: '10. Porcentaje de estudiantes en secundaria, mayores de 17 años.', unidad: '%',
+      descripcion: 'Busca identificar el atraso escolar en este nivel, es decir el porcentaje de estudiantes mayores de 17 años en el nivel secundario. Ademas este indicador no se debe encontrar fuera de los rangos permisibles.',
+      formula: 'Total de estud.sec. (P208A > 17 & (P308A=3) / Total casos con respuesta (P308A=3) & residentes * 100 ' },
+  ],
+})

@@ -177,10 +177,33 @@ por mes).
 - "Visualizar casos" (balance del hogar, indicadores 11 y 12 de vivienda y hogar) llama a
   `calidad_viviendaHogar_detalleBalanceHogar`.
 
-Migradas: vivienda y hogar, programas sociales. Pendientes: demográficos (pirámide de
-edad), consumo de alimentos (precios IPC, kilos, canasta), educación (tasa de asistencia
-escolar por dominio), salud (razones de no asistencia) y empleo (PET, ninis, etnicidad):
-usan el mismo esquema más algunos indicadores con procedimiento propio.
+Indicadores con consulta propia (`especiales` en `indicadores.py`, y en el frontend
+`config/reportesCalidad/especiales.js`):
+
+| Pantalla | Indicador | Procedimientos |
+|---|---|---|
+| Vivienda y hogar | 11 y 12, Visualizar casos | calidad_viviendaHogar_detalleBalanceHogar |
+| Demográficos | 9. Pirámide de edad (año actual y dos anteriores) | enaho2020_calidad_piramide_edad (una llamada por año) |
+| Demográficos | 10, Visualizar casos | calidad_demografico_detalleMiembrosHogar |
+| Consumo de alimentos | 4. Precios (y detalle por provincias / hogares) | enaho2017_calidad_diferenciaPrecios, enaho2018_calidad_preciosProvincias, enaho2018_calidad_preciosLista |
+| Consumo de alimentos | 7, Visualizar casos | calidad_consumoHogar_detalleGastosCanasta |
+| Educación | 3. Tasa de asistencia escolar (combo de dominio) | enaho2020_calidad_tasaasistenciaescolar_{vista}{dominio} |
+| Salud | 3. Razones de no asistencia (combo de razones) | enaho2017_calidad_{69..79}{vista} |
+| Empleo | 6. Situación laboral 15-24 años, por mes (4 tablas) | enaho2017_calidad_313_{se,st,et,nini} |
+| Empleo | 7. PET con trimestre móvil (combos ODEI y encuestador) | enaho2017_calidad_421, Calidad_EmpleoOtros_PetSegunCondicionActividad_{anual,mensual}, enaho_usuario_monitoreo |
+| Empleo | 11. Etnicidad | enaho2017_calidad_36{vista} (periodos, meses, exclusiones) |
+
+Cuando un indicador necesita varias llamadas (pirámide, situación laboral, PET), el backend
+las hace una tras otra y marca cada fila (`anio_piramide`, `grupo`, `serie`). El Excel
+genérico acepta `secciones` para exportar varias tablas en la misma hoja.
+
+Diferencias con la pantalla actual:
+- Precios: el detalle por provincias y por hogares, que se abría en una ventana, ahora es un
+  nivel más de la tabla (con migas para volver y su propio Excel).
+- Situación laboral por mes: las cuatro tablas comparten la navegación (antes cada una tenía
+  la suya).
+- PET: hacer clic en el nombre de un indicador de la tabla ya no abre un gráfico aparte; los
+  gráficos están en la pestaña gráfica.
 
 ## Cómo migrar una pantalla nueva
 

@@ -12,7 +12,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { useRoute, useRouter } from 'vue-router'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
-import { BarChart, LineChart, MapChart } from 'echarts/charts'
+import { BarChart, LineChart, MapChart, PieChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TitleComponent, TooltipComponent, ToolboxComponent,
   VisualMapComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -25,7 +25,7 @@ import TablaReporte from '@/components/reportes/TablaReporte.vue'
 import { CONFIGURACIONES as COBERTURA } from '@/config/reportesCobertura'
 import { CONFIGURACIONES as CALIDAD } from '@/config/reportesCalidad'
 
-use([BarChart, LineChart, MapChart, GridComponent, LegendComponent, TitleComponent, TooltipComponent,
+use([BarChart, LineChart, MapChart, PieChart, GridComponent, LegendComponent, TitleComponent, TooltipComponent,
   ToolboxComponent, VisualMapComponent, CanvasRenderer])
 
 const props = defineProps({
@@ -46,7 +46,7 @@ const OPC_MES = [{ t: 'Seleccione', v: 0 }, ...MESES.map((m, i) => ({ t: m, v: i
 const OPC_PERIODO = [{ t: 'TODOS', v: 0 }, ...[1, 2, 3, 4, 5].map((p) => ({ t: String(p), v: p }))]
 const ODEIS = ref([])
 const filtros = reactive({ mes_inicio: 0, periodo_inicio: 0, mes_fin: 0, periodo_fin: 0, excluir: 0,
-  sede: 0, mes: 0, periodo: 0 })
+  sede: 0, mes: 0, periodo: 0, encuestador: '0', ...cfg.filtrosIniciales })
 const aplicados = ref({ ...filtros })
 const odeiUsuario = computed(() => Number(auth.usuario?.odei ?? 0))
 const opcionesOdei = computed(() => (odeiUsuario.value
@@ -81,8 +81,12 @@ const ctx = computed(() => {
     sede, nombreSede: q.value.nombreSede || '', usuario, encuestador: q.value.encuestador || '',
     conglomerado, filtros: aplicados.value, anio: new Date().getFullYear(),
     odeiPermitida: (c) => !odeiUsuario.value || odeiUsuario.value === Number.parseInt(c, 10),
+    query: q.value,
   }
 })
+// Combos propios junto al de indicadores (razones de no asistencia, dominio...): van en la dirección
+const selectores = computed(() => (cfg.selectores ? cfg.selectores(ctx.value) : []))
+const valorSelector = (s) => q.value[s.clave] ?? String(s.opciones[0]?.v ?? '')
 function ir(cambios, reemplazar = false) {
   const query = { ...route.query, ...cambios }
   Object.keys(query).forEach((k) => (query[k] == null || query[k] === '' || query[k] === '0') && delete query[k])
@@ -103,6 +107,8 @@ function cambiarIndicador(i) {
 }
 const migas = computed(() => {
   const c = ctx.value
+  const propias = cfg.migas?.(c)
+  if (propias) return propias
   const m = [{ texto: 'NACIONAL', ir: c.nivel > 1 ? { sede: null, nombreSede: null, usuario: null, encuestador: null, conglomerado: null } : null }]
   if (c.nivel >= 2) m.push({ texto: c.nombreSede || c.sede, ir: c.nivel > 2 ? { usuario: null, encuestador: null, conglomerado: null } : null })
   if (c.nivel >= 3) m.push({ texto: c.encuestador || c.usuario, ir: c.nivel > 3 ? { conglomerado: null } : null })
@@ -166,8 +172,27 @@ function buscar() {
 const modelo = computed(() => cfg.tabla(filas.value, { ...ctx.value, pestana: pestana.value }))
 const graficos = computed(() => (cfg.graficos ? cfg.graficos(filas.value, { ...ctx.value, pestana: pestana.value }) : []))
 const opcionesMapa = computed(() => opcionesMapaCalor(filasMapa.value, cfg.mapa?.etiqueta ?? ''))
+// Filtros: nombres conocidos ('mes_inicio', 'sede', ...) o combos propios { campo, etiqueta, opciones }
 const filtrosVisibles = computed(() => cfg.filtros({ ...ctx.value, pestana: pestana.value }))
 const ve = (nombre) => filtrosVisibles.value.includes(nombre)
+const combosPropios = computed(() => filtrosVisibles.value.filter((f) => typeof f === 'object'))
+// opciones: 'odeis' = las ODEI que el usuario puede ver, sin "TODOS" (precios)
+const opcionesDe = (f) => (f.opciones === 'odeis'
+  ? ODEIS.value.filter((o) => !odeiUsuario.value || Number(o.codigo) === odeiUsuario.value)
+    .map((o) => ({ v: Number(o.codigo), t: o.nombre }))
+  : f.opciones)
+const exclusiones = computed(() => (typeof cfg.exclusiones === 'function' ? cfg.exclusiones(ctx.value) : cfg.exclusiones) ?? [])
+// Combo de encuestadores de la ODEI elegida (PET según condición de actividad)
+const ENCUESTADORES = ref([])
+watch(() => [ve('encuestador'), filtros.sede], async ([visible, sede]) => {
+  filtros.encuestador = '0'
+  ENCUESTADORES.value = []
+  if (!visible || !Number(sede)) return
+  try {
+    const params = { indicador: ctx.value.indicador, sede: String(sede) }
+    ENCUESTADORES.value = (await api.tabla(props.modulo, props.pantalla, 'encuestadores', params)).data.filas
+  } catch { /* el combo queda solo con SELECCIONE */ }
+})
 const titulo = computed(() => cfg.titulo({ ...ctx.value, pestana: pestana.value }))
 const textos = computed(() => (typeof cfg.textos === 'function' ? cfg.textos(ctx.value) : cfg.textos) ?? [])
 const esTabla = computed(() => !['grafico', 'mapa'].includes(pestana.value))
@@ -188,9 +213,13 @@ function textoFiltros() {
   if (ve('periodo_inicio') && a.periodo_inicio) partes.push(`Periodo inicial: ${a.periodo_inicio}`)
   if (ve('mes_fin') && a.mes_fin) partes.push(`Mes final: ${MESES[a.mes_fin - 1]}`)
   if (ve('periodo_fin') && a.periodo_fin) partes.push(`Periodo final: ${a.periodo_fin}`)
-  if (ve('excluir')) partes.push(`Excluir: ${cfg.exclusiones?.find((e) => e.v === a.excluir)?.t ?? ''}`)
+  if (ve('excluir')) partes.push(`Excluir: ${exclusiones.value.find((e) => e.v === a.excluir)?.t ?? ''}`)
   if (ve('mes') && a.mes) partes.push(`Mes: ${MESES[a.mes - 1]}`)
   if (ve('periodo') && a.periodo) partes.push(`Periodo: ${a.periodo}`)
+  combosPropios.value.forEach((f) => {
+    const o = opcionesDe(f).find((x) => String(x.v) === String(a[f.campo]))
+    if (o) partes.push(`${f.etiqueta.replace(/:$/, '')}: ${o.t}`)
+  })
   return partes.join(' - ')
 }
 async function exportar() {
@@ -199,18 +228,23 @@ async function exportar() {
     // Lo que se ve en pantalla (sin los grupos cerrados), celda por celda
     const visible = (c) => !c.grupo || !cerrados.value.has(c.grupo)
     const m = modelo.value
-    const tabla = {
-      titulo: cfg.tituloExcel ? cfg.tituloExcel({ ...ctx.value, pestana: pestana.value }) : titulo.value,
-      nombre_archivo: (cfg.archivo ?? props.pantalla).replace(/[^\w\- ]/g, '-'),
-      color: (cfg.colorEncabezado ?? '#0065A9').replace('#', ''),
-      encabezados: m.encabezados.map((f) => f.filter(visible).map((c) => ({ texto: String(c.texto).replace(/\n/g, ' '),
+    const seccion = (mm) => ({
+      titulo: mm.titulo ?? '',
+      encabezados: mm.encabezados.map((f) => f.filter(visible).map((c) => ({ texto: String(c.texto).replace(/\n/g, ' '),
         columnas: c.alternar && c.columnasCerrado && cerrados.value.has(c.alternar) ? c.columnasCerrado : (c.columnas ?? 1),
         filas: c.filas ?? 1 }))),
-      filas: m.filas.map((f) => {
+      filas: mm.filas.map((f) => {
         const celdas = f.celdas.filter(visible)
         return { total: !!f.total, celdas: celdas.map((c) => String(c.texto ?? '')),
           resaltadas: celdas.flatMap((c, k) => (c.resaltado ? [k] : [])) }
       }),
+    })
+    const tabla = {
+      titulo: cfg.tituloExcel ? cfg.tituloExcel({ ...ctx.value, pestana: pestana.value }) : titulo.value,
+      nombre_archivo: (cfg.archivo ?? props.pantalla).replace(/[^\w\- ]/g, '-'),
+      color: (cfg.colorEncabezado ?? '#0065A9').replace('#', ''),
+      // Varias tablas en la misma pantalla (situación laboral por mes): una debajo de otra
+      ...(m.secciones ? { secciones: m.secciones.map(seccion) } : seccion(m)),
       pie: [textoFiltros() ? `SELECCIÓN: ${textoFiltros()}` : ''],
     }
     const { data } = await api.excel(tabla)
@@ -282,6 +316,13 @@ onBeforeUnmount(() => {
       </select>
     </div>
 
+    <div v-for="s in selectores" :key="s.clave" class="indicador">
+      <label :for="`cmb-${s.clave}`">{{ s.etiqueta }}</label>
+      <select :id="`cmb-${s.clave}`" :value="valorSelector(s)" @change="ir({ [s.clave]: $event.target.value }, true)">
+        <option v-for="o in s.opciones" :key="o.v" :value="String(o.v)">{{ o.t }}</option>
+      </select>
+    </div>
+
     <div v-if="vistasDe(ctx).length" class="vistas">
       <button v-for="v in vistasDe(ctx)" :key="v.codigo" :class="['btn-vista', { activo: vista === v.codigo }]"
         @click="cambiarVista(v.codigo)">{{ v.nombre }}</button>
@@ -321,7 +362,12 @@ onBeforeUnmount(() => {
       <label v-if="ve('periodo_fin')">Periodo final:<select v-model.number="filtros.periodo_fin">
         <option v-for="o in OPC_PERIODO" :key="o.v" :value="o.v">{{ o.t }}</option></select></label>
       <label v-if="ve('excluir')" class="ancho">Exclusiones:<select v-model.number="filtros.excluir">
-        <option v-for="o in cfg.exclusiones" :key="o.v" :value="o.v">{{ o.t }}</option></select></label>
+        <option v-for="o in exclusiones" :key="o.v" :value="o.v">{{ o.t }}</option></select></label>
+      <label v-if="ve('encuestador')" class="ancho">Encuestador:<select v-model="filtros.encuestador">
+        <option value="0">SELECCIONE</option>
+        <option v-for="o in ENCUESTADORES" :key="o.value" :value="String(o.value)">{{ o.texto }}</option></select></label>
+      <label v-for="f in combosPropios" :key="f.campo" :class="{ ancho: f.ancho }">{{ f.etiqueta }}<select v-model="filtros[f.campo]">
+        <option v-for="o in opcionesDe(f)" :key="o.v" :value="o.v">{{ o.t }}</option></select></label>
       <button class="btn-buscar" :disabled="ocupado" @click="buscar">Buscar</button>
     </div>
 
@@ -348,14 +394,14 @@ onBeforeUnmount(() => {
 
     <!-- TABLAS -->
     <div v-if="esTabla">
-      <div v-if="ctx.nivel > 1" class="migas">
+      <div v-if="migas.length > 1" class="migas">
         <template v-for="(m, k) in migas" :key="k">
           <a v-if="m.ir" @click="ir(m.ir)">{{ m.texto }}</a><span v-else>{{ m.texto }}</span>
           <span v-if="k < migas.length - 1"> &gt; </span>
         </template>
       </div>
       <div class="exportar">
-        <a :class="{ deshabilitado: exportando || !filas.length }" @click="exportar">
+        <a v-if="modelo.exportable !== false" :class="{ deshabilitado: exportando || !filas.length }" @click="exportar">
           <v-icon icon="mdi-microsoft-excel" color="#1D6F42" size="22" /> Exportar Excel
         </a>
         <slot name="acciones" :filas="filas" :ctx="ctx" />
@@ -366,7 +412,15 @@ onBeforeUnmount(() => {
           density="compact" variant="outlined" hide-details style="max-width: 240px" />
       </div>
       <div ref="contenedorTabla">
-        <TablaReporte :modelo="modelo" :cerrados="cerrados" :busqueda="busqueda" :alto="altoTabla"
+        <!-- Varias tablas (situación laboral por mes): una debajo de otra, cada una con su título -->
+        <template v-if="modelo.secciones">
+          <div v-for="(m, k) in modelo.secciones" :key="k" class="seccion">
+            <h6 v-if="m.titulo" class="titulo-seccion">{{ m.titulo }}</h6>
+            <TablaReporte :modelo="m" :cerrados="cerrados" :busqueda="busqueda" :alto="Math.max(320, altoTabla / 2)"
+              :color="cfg.colorEncabezado ?? '#0065A9'" @ir="(e) => ir(e)" @alternar="alternar" />
+          </div>
+        </template>
+        <TablaReporte v-else :modelo="modelo" :cerrados="cerrados" :busqueda="busqueda" :alto="altoTabla"
           :color="cfg.colorEncabezado ?? '#0065A9'" @ir="(e) => ir(e)" @alternar="alternar" />
       </div>
     </div>
@@ -389,7 +443,7 @@ onBeforeUnmount(() => {
 .cuadro-formula { margin: 18px auto 0; max-width: 760px; border-collapse: collapse; border: 3px solid #4C81C9; font-size: 0.85rem; }
 .cuadro-formula th, .cuadro-formula td { border: 1px solid #ddd; padding: 8px 12px; }
 .cuadro-formula thead th { background: #0065A9; color: #fff; text-align: center; }
-.cuadro-formula td { text-align: center; }
+.cuadro-formula td { text-align: center; white-space: pre-line; }
 .vistas { display: flex; justify-content: center; flex-wrap: wrap; margin: 24px 0 18px; }
 .btn-vista { border: 1px solid #1E88E5; color: #1E88E5; background: #fff; padding: 7px 14px; font-size: 0.9rem; cursor: pointer; }
 .btn-vista + .btn-vista { border-left: none; }
@@ -412,6 +466,9 @@ onBeforeUnmount(() => {
 .graficos { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-around; }
 .grafico.completo { flex: 1 1 100%; }
 .grafico.medio { flex: 1 1 440px; max-width: 49%; border: 1px solid #eee; padding: 8px; }
+.grafico.tercio { flex: 1 1 300px; max-width: 32%; border: 1px solid #eee; padding: 8px; }
+.seccion + .seccion { margin-top: 22px; }
+.titulo-seccion { text-align: center; font-size: 0.9rem; font-weight: 700; margin: 6px 0 8px; }
 .texto-indicador { font-size: 0.88rem; margin-top: 12px; }
 .texto-indicador p { margin: 4px 0; }
 .migas { margin: 10px 0 0 12px; font-size: 0.9rem; font-weight: 700; }
@@ -421,5 +478,5 @@ onBeforeUnmount(() => {
 .exportar a.deshabilitado { opacity: 0.5; pointer-events: none; }
 .buscar { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 0.85rem; margin-bottom: 6px; }
 .mapa { max-width: 1140px; margin: 0 auto; }
-@media (max-width: 960px) { .grafico.medio { max-width: 100%; } }
+@media (max-width: 960px) { .grafico.medio, .grafico.tercio { max-width: 100%; } }
 </style>
